@@ -14,7 +14,7 @@ export function init(canvas) {
     keys.add(e.code);
     const menu = view.screen === 'menu';
     switch (e.code) {
-      case 'Space': emit(menu ? 'menu:swing' : 'key', 'whirl'); break;
+      case 'Space': if (menu) emit('menu:swing'); else emit('key', 'whirl'); break;
       case 'KeyE': if (!menu) emit('key', 'rage'); break;
       case 'KeyN': if (!menu) emit('key', 'next'); break;
       case 'KeyP': if (!menu) emit('key', 'pause'); break;
@@ -28,11 +28,7 @@ export function init(canvas) {
   });
   document.addEventListener('keyup', e => keys.delete(e.code));
   document.addEventListener('pointerdown', () => { audioInit(); resume(); });
-
-  canvas.addEventListener('pointerdown', e => {
-    down = { x: e.clientX, id: e.pointerId }; dragged = false;
-    canvas.setPointerCapture(e.pointerId);
-  });
+  canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, id: e.pointerId }; dragged = false; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} });
   canvas.addEventListener('pointermove', e => {
     if (!down || e.pointerId !== down.id) return;
     if (Math.abs(e.clientX - down.x) > 10) dragged = true;
