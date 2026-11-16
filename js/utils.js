@@ -1,0 +1,14 @@
+export const TAU = Math.PI * 2;
+export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+export const lerp = (a, b, t) => a + (b - a) * t;
+export const rnd = (a = 1, b) => b === undefined ? Math.random() * a : a + Math.random() * (b - a);
+export const n1 = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+export let boil = 0;
+export const setBoil = v => boil = v;
+export const jit = (seed, i, a) => (n1(seed * 13.37 + i * 7.77 + boil * 3.1) - .5) * 2 * a;
+export const fmtT = s => { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+export const fmtN = n => n >= 10000 ? (n / 1000).toFixed(1) + 'k' : String(Math.floor(n));
+export const uuid = () => crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now() + Math.random().toString(36).slice(2);
+export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const NICK_RE = /^[A-Za-zА-Яа-яЁё0-9_\- ]{3,16}$/;
+export const easeOut = t => 1 - (1 - t) * (1 - t);
