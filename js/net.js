@@ -29,8 +29,6 @@ export async function checkApi(url) {
   throw new Error('bad response');
 }
 export async function submit(entry) {
-  return fetchJSON(apiBase() + '/api/submit', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry),
-  });
+  return fetchJSON(apiBase() + '/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
 }
 export function recordLocal(entry) { pushLocal(entry); emit('board'); }
