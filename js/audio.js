@@ -10,10 +10,7 @@ export function init() {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const g = AC.createGain(), fl = AC.createBiquadFilter();
     g.gain.value = .04; fl.type = 'lowpass'; fl.frequency.value = 210;
-    [55, 55.6, 110.3].forEach((f, i) => {
-      const o = AC.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f;
-      o.connect(fl); o.start();
-    });
+    [55, 55.6, 110.3].forEach((f, i) => { const o = AC.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f; o.connect(fl); o.start(); });
     const lfo = AC.createOscillator(), lg = AC.createGain();
     lfo.frequency.value = .07; lg.gain.value = 70; lfo.connect(lg); lg.connect(fl.frequency); lfo.start();
     fl.connect(g); g.connect(master);
@@ -70,7 +67,6 @@ export const SFX = {
   err: () => { tone('square', 160, 160, .09, .1); tone('square', 120, 120, .12, .1, .1); },
   step: () => { tone('sine', 70, 45, .1, .12); noise(.05, .05, 200, 'lowpass'); },
   spit: () => tone('sawtooth', 600, 240, .12, .05),
-  fuse: () => tone('square', 900, 1400, .08, .05),
 };
-export const play = name => SFX[name] && SFX[name]();
+export const play = name => { try { SFX[name] && SFX[name](); } catch (e) {} };
 export const weaponSound = kind => ({ jab: 'jab', swing: 'swing', slam: 'slam', spin: 'reap' }[kind] || 'swing');
