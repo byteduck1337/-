@@ -1,4 +1,4 @@
-export const DEFAULT_API = ''; // адрес воркера по умолчанию (или задаётся в настройках)
+export const DEFAULT_API = '';
 
 export const BAL = {
   startGold: 160, ptsPerLevel: 3,
@@ -26,7 +26,6 @@ export const STATS = [
   { k: 'lck', n: 'УДАЧА', eff: s => `золото +${s * 5}% · опыт +${s * 4}%` },
 ];
 
-/* Оружие ближнего боя. kind определяет анимацию взмаха и форму следа. */
 export const WEAPONS = {
   fists:  { name: 'КУЛАКИ', flavor: 'то, с чего все начинают', cost: 0, dmg: 1, rate: 1.15, range: 62, arc: .7, kb: 6, kind: 'jab', crit: 0, pierce: 0, steal: 0 },
   knife:  { name: 'НОЖ', flavor: 'быстрый. тихий. свой.', cost: 80, dmg: 1.2, rate: 1.7, range: 74, arc: .5, kb: 8, kind: 'jab', crit: .06, pierce: 0, steal: 0 },
@@ -46,7 +45,6 @@ export const TOWERS = {
 };
 export const tUpCost = (type, lvl) => Math.round(TOWERS[type].cost * .65 * Math.pow(1.55, lvl));
 
-/* Типы врагов: силуэт, походка (gait), поведение и сопротивления различаются. */
 export const ENEMIES = {
   walk:   { name: 'ШАГУН', hp: 1, dmg: 1, spd: 1, xp: 1, gold: 1, s: 30, from: 1, armor: 0, gait: 'walk' },
   run:    { name: 'БЕГУН', hp: .5, dmg: .7, spd: 1.9, xp: .9, gold: .9, s: 26, from: 2, armor: 0, gait: 'run' },
