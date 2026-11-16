@@ -9,13 +9,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
 <div id="grain"></div><div id="vig"></div><div id="lowhp"></div>
+<div id="boot" class="hidden"></div>
 <canvas id="scene"></canvas>
 
-<!-- ======= ГЛАВНОЕ МЕНЮ ======= -->
 <div id="menu" class="layer">
   <header class="m-top">
     <div class="m-logo">ЧЕРТА
@@ -35,13 +35,12 @@
   </footer>
 </div>
 
-<!-- ======= БОЙ ======= -->
 <div id="battle" class="layer hidden">
   <div class="b-top">
     <div class="b-bar">
       <label>ПРОЧНОСТЬ</label>
       <div class="bar sk" id="hpBar"><i id="hpFill"></i></div>
-      <span id="hpText"></span>
+      <span id="hpText">—</span>
     </div>
     <div class="b-wave">
       <div id="waveNum">ГОТОВЬСЯ</div>
@@ -64,10 +63,10 @@
   <div id="banner" class="hidden"><b id="bannerT"></b><span id="bannerS"></span></div>
   <div class="b-bottom">
     <div class="b-posts">
-      <button id="post0" class="post sk"></button>
-      <button id="post1" class="post sk"></button>
+      <button id="post0" class="post sk empty"><b>ПОСТ 1 +</b>построить башню</button>
+      <button id="post1" class="post sk empty"><b>ПОСТ 2 +</b>построить башню</button>
     </div>
-    <div class="b-weapon"><b id="wName"></b><span id="wHint">клик / SPACE — вихрь · E — ярость</span></div>
+    <div class="b-weapon"><b id="wName">КУЛАКИ</b><span>клик / SPACE — вихрь · E — ярость</span></div>
     <div class="b-nums"><span class="gold">¤ <b id="goldVal">0</b></span><span class="dim">✕ <b id="killVal">0</b></span></div>
     <div class="b-abs">
       <button id="ab1" class="ab sk"><b>ВИХРЬ</b><kbd>SPC</kbd><i id="ab1cd"></i><em id="ab1s"></em></button>
@@ -84,15 +83,12 @@
   </div>
 </div>
 
-<!-- ======= ЛИСТ (арсенал / прокачка / рекорды / настройки) ======= -->
 <aside id="sheet" class="hidden">
   <button id="sheetClose" class="ibtn icon" aria-label="закрыть">✕</button>
   <div id="sheetBody"></div>
 </aside>
-
 <div id="pop" class="sk hidden"></div>
 
-<!-- ======= ИТОГИ ЗАБЕГА ======= -->
 <div id="summary" class="hidden">
   <div class="sum sk">
     <div id="sumTitle" class="sum-title">ЧЕРТА ПРОРВАНА</div>
@@ -106,8 +102,7 @@
       <div><label>БОЕЦ</label><b id="sumLevel"></b></div>
     </div>
     <div class="sum-send">
-      <input id="sumNick" maxlength="16" spellcheck="false" placeholder="ПОЗЫВНОЙ">
-      <button id="btnSubmit" class="ibtn fill small">ОТПРАВИТЬ РЕКОРД</button>
+      <div class="apirow"><input id="sumNick" maxlength="16" spellcheck="false" placeholder="ПОЗЫВНОЙ"><button id="btnSubmit" class="ibtn fill small">ОТПРАВИТЬ РЕКОРД</button></div>
       <div id="submitStatus"></div>
     </div>
     <div class="sum-actions">
@@ -118,6 +113,21 @@
 </div>
 
 <div id="toasts"></div>
-<script type="module" src="js/main.js"></script>
+<noscript><div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#f2f2ee;font-family:monospace">Для игры нужен JavaScript.</div></noscript>
+<script>
+/* видимая диагностика вместо чёрного экрана, если модуль не загрузился */
+window.__bootFail = function (msg) {
+  var b = document.getElementById('boot');
+  b.classList.remove('hidden');
+  b.textContent = '⚠ ' + msg + ' — обнови страницу с Ctrl+F5 и проверь, что папки js/ и css/ закоммичены в репозиторий.';
+};
+window.addEventListener('error', function (e) {
+  if (e.target && e.target.tagName === 'SCRIPT') window.__bootFail('не загружен ' + (e.target.src || 'модуль'));
+  else if (e.message) window.__bootFail(e.message);
+}, true);
+window.addEventListener('unhandledrejection', function (e) { window.__bootFail(String(e.reason && e.reason.message || e.reason)); });
+setTimeout(function () { if (!window.__booted) window.__bootFail('игра не запустилась (проверь консоль: F12)'); }, 4000);
+</script>
+<script type="module" src="js/main.js?v=3" onerror="__bootFail('не загружен js/main.js')"></script>
 </body>
 </html>
