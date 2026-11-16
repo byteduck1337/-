@@ -1,6 +1,6 @@
-import { BAL, ENEMIES, TOWERS, tUpCost, WEAPONS } from './config.js';
+import { BAL, ENEMIES, TOWERS, tUpCost } from './config.js';
 import { S, D, calc, gainGold, gainXp, saveNow, saveSoon, newRunId } from './state.js';
-import { emit } from './events.js';
+import { on, emit } from './events.js';
 import { view } from './view.js';
 import { clamp, rnd, TAU } from './utils.js';
 import { play, weaponSound } from './audio.js';
@@ -12,7 +12,7 @@ export function startRun() {
   calc();
   G = {
     t: 0, wave: 0, cleared: 0, phase: 'inter', interT: 6, waveT: 0,
-    player: { x: view.cx, face: 1, ph: 0, atkCd: 0, swing: -1, swingKind: D.kind, deadT: 0, seed: rnd(1000) },
+    player: { x: view.cx || innerWidth / 2, face: 1, ph: 0, atkCd: 0, swing: -1, swingKind: D.kind, deadT: 0, seed: rnd(1000) },
     hp: D.maxHp, maxHp: D.maxHp,
     ab1: 0, ab1Max: D.whirlCd, ab2: 0, ab2Max: 22, rage: 0,
     towers: [null, null], enemies: [], spawnQ: [], shots: [], eShots: [], beams: [],
@@ -21,22 +21,21 @@ export function startRun() {
     shake: 0, paused: false, panelPause: false, over: false, deathDone: false, prevBest: S.best,
     boss: null, hoverTower: -1,
   };
-  emit('run:start');
+  emit('run:start', G);
   emit('banner', 'ГОТОВЬСЯ', 'ВОЛНА 1 ЧЕРЕЗ 6 СЕК · N — РАНЬШЕ', '');
+  emit('wave:inter', 1);
   play('horn');
   if (!S.seenHint) { S.seenHint = true; saveSoon(); setTimeout(() => emit('toast', 'Кликни по посту внизу — построй башню. Золото уже есть.', 'gold'), 1200); }
+  return G;
 }
-export function pause(on) {
-  if (!G || G.phase === 'over' || G.phase === 'dying') return;
-  G.paused = on; emit('pause', on);
-}
+export function pause(on) { if (!G || G.phase === 'over' || G.phase === 'dying') return; G.paused = on; emit('pause', on); }
 export function panelPause(on) { if (G) { G.panelPause = on; emit('panelPause', on); } }
 
 export function towerX(i) { return view.cx + (i === 0 ? -1 : 1) * Math.min(200, view.W * .26); }
 export function towerDmg(t) { return TOWERS[t.type].dmg * Math.pow(1.32, t.lvl - 1) * D.tDmg; }
 export function towerRate(t) { return Math.min(6, TOWERS[t.type].rate * (1 + .06 * (t.lvl - 1)) * D.tRate); }
 export function buildTower(i, type) {
-  if (!G || G.towers[i] || S.gold < TOWERS[type].cost) return false;
+  if (!G || G.towers[i] || !TOWERS[type] || S.gold < TOWERS[type].cost) return false;
   S.gold -= TOWERS[type].cost;
   G.towers[i] = { type, lvl: 1, cd: rnd(.2, .6), spent: TOWERS[type].cost, trace: new Array(32).fill(0), ti: 0, flash: 0, aim: 0, recoil: 0 };
   play('build'); emit('gold', S.gold); emit('towers'); saveSoon();
@@ -60,7 +59,6 @@ export function sellTower(i) {
   return true;
 }
 
-/* ---- волны ---- */
 function beginWave(n) {
   G.wave = n; G.waveT = 0; G.phase = 'wave'; G.boss = null;
   const bossWave = n % 5 === 0;
@@ -69,16 +67,13 @@ function beginWave(n) {
   const q = []; let d = .5;
   for (let i = 0; i < count; i++) {
     let type = 'walk';
-    if (pool.length > 1 && Math.random() < .62) {
-      const alt = pool.filter(k => k !== 'walk');
-      type = alt[Math.floor(rnd(alt.length))];
-    }
+    if (pool.length > 1 && Math.random() < .62) { const alt = pool.filter(k => k !== 'walk'); type = alt[Math.floor(rnd(alt.length))]; }
     d += BAL.interval(n) * rnd(.7, 1.3);
     q.push({ type, side: Math.random() < .5 ? -1 : 1, at: d });
   }
   if (bossWave) q.splice(Math.floor(q.length / 2), 0, { type: 'boss', side: Math.random() < .5 ? -1 : 1, at: d + BAL.interval(n) });
   G.spawnQ = q;
-  emit('banner', 'ВОЛНА ' + n, bossWave ? '⚠ КОЛОСС ИДЁТ ⚠' : q.length + ' ВРАГОВ · РАЗНЫЕ ТИПЫ', bossWave ? 'red' : '');
+  emit('banner', 'ВОЛНА ' + n, bossWave ? '⚠ КОЛОСС ИДЁТ ⚠' : q.length + ' ВРАГОВ', bossWave ? 'red' : '');
   play('horn');
 }
 function spawnEnemy(spec) {
@@ -88,8 +83,7 @@ function spawnEnemy(spec) {
     s: t.s * rnd(.92, 1.08), hp: BAL.eHp(w) * t.hp, spd: BAL.eSpd(w) * t.spd * rnd(.88, 1.14),
     dmg: BAL.eDmg(w) * t.dmg, ph: rnd(6), seed: rnd(1000), stop: t.boss ? 70 : 30 + rnd(26),
     atkCd: rnd(.4, 1), wind: 0, flash: 0, stun: 0, face: spec.side < 0 ? 1 : -1, dead: false, lastStep: 0,
-    freq: rnd(.82, 1.22), asym: rnd(-.2, .2), armAmp: rnd(.6, 1.35), tilt: rnd(-.12, .12),
-    fuse: 0,
+    freq: rnd(.82, 1.22), asym: rnd(-.2, .2), armAmp: rnd(.6, 1.35), tilt: rnd(-.12, .12), fuse: 0,
   };
   e.maxHp = e.hp; G.enemies.push(e);
   if (t.boss) { G.boss = e; emit('boss', e); }
@@ -99,7 +93,8 @@ function onClear() {
   const bossWave = G.wave % 5 === 0;
   const g = Math.round(BAL.waveGold(G.wave) * (bossWave ? 2 : 1) * D.goldM);
   const x = Math.round(BAL.waveXp(G.wave) * D.xpM);
-  gainGold(g); gainXp(x); G.goldEarned += 0; // учтено ниже через pickups-события
+  G.goldEarned += g; G.xpEarned += x;
+  gainGold(g); gainXp(x);
   const heal = Math.min(G.maxHp * .5, G.maxHp * (.2 + .02 * S.stats.vit));
   G.hp = Math.min(G.maxHp, G.hp + heal);
   emit('banner', 'ВОЛНА ' + G.wave + ' ЗАЧИЩЕНА', `+¤${g} · +${x} XP · +${Math.round(heal)} HP`, 'green');
@@ -108,7 +103,6 @@ function onClear() {
   emit('wave:inter', G.wave + 1); emit('boss', null);
 }
 
-/* ---- урон / смерть ---- */
 function addText(x, y, str, col = '#f2f2ee', size = 11) {
   if (G.texts.length > 60) G.texts.shift();
   G.texts.push({ x, y, str, col, size, t: 0, life: .9 });
@@ -122,11 +116,10 @@ function burst(x, y, n, col, spd = 160, grav = 380, life = .6) {
   }
 }
 function shake(v) { if (S.shake) G.shake = Math.max(G.shake, v); }
-
 function meleeDamage(e, dmg, opts = {}) {
   const t = ENEMIES[e.type];
   if (t.ghost && !opts.force && Math.random() < .3) { addText(e.x, view.ground + e.gyOff - e.s * 3, 'МИМО', '#8a8a86', 10); play('miss'); return 0; }
-  let front = Math.sign(G.player.x - e.x) === e.face;
+  const front = Math.sign(G.player.x - e.x) === e.face;
   if (t.shield && front && !opts.force) dmg *= .45;
   const armor = BAL.armor(G.wave) * (t.armor || 0);
   dmg = Math.max(1, dmg - Math.max(0, armor - D.pierce));
@@ -176,11 +169,8 @@ export function endRun(reason) {
   const record = G.wave > S.prevBest;
   if (G.wave > S.best) S.best = G.wave;
   const data = { reason, wave: G.wave, kills: G.kills, time: Math.floor(G.t), gold: G.goldEarned, xp: G.xpEarned, lvl: G.lvlGained, level: S.level, record, runId: G.runId };
-  saveNow();
-  emit('run:end', data);
+  saveNow(); emit('run:end', data);
 }
-
-/* ---- способности ---- */
 export function whirl() {
   if (!G || G.ab1 > 0 || (G.phase !== 'wave' && G.phase !== 'inter')) return;
   G.ab1 = G.ab1Max = D.whirlCd;
@@ -204,8 +194,8 @@ export function rage() {
   burst(G.player.x, view.ground - 80, 14, '#46f28e', 200, 100);
 }
 
-/* ---- шаг симуляции ---- */
 export function step(dt) {
+  if (!G) return;
   G.t += dt;
   if (G.phase === 'dying') { G.player.deadT += dt; updFx(dt); if (G.player.deadT > 1.6 && !G.deathDone) { G.deathDone = true; endRun('death'); } return; }
   if (G.phase === 'over') { updFx(dt); return; }
@@ -213,10 +203,7 @@ export function step(dt) {
   G.ab1 = Math.max(0, G.ab1 - dt); G.ab2 = Math.max(0, G.ab2 - dt); G.rage = Math.max(0, G.rage - dt);
   G.hp = Math.min(G.maxHp, G.hp + D.regen * dt);
   if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) beginWave(G.wave + 1); }
-  else if (G.phase === 'wave') {
-    G.waveT += dt;
-    while (G.spawnQ.length && G.spawnQ[0].at <= G.waveT && G.enemies.length < 42) spawnEnemy(G.spawnQ.shift());
-  }
+  else if (G.phase === 'wave') { G.waveT += dt; while (G.spawnQ.length && G.spawnQ[0].at <= G.waveT && G.enemies.length < 42) spawnEnemy(G.spawnQ.shift()); }
   updPlayer(dt); updTowers(dt); updEnemies(dt); updShots(dt); updFx(dt);
   if (G.phase === 'wave' && !G.spawnQ.length && !G.enemies.length) onClear();
 }
@@ -243,17 +230,16 @@ function updPlayer(dt) {
       play(weaponSound(D.kind));
       const dmg = D.dmg * (G.rage > 0 ? 1.4 : 1);
       const hit = e => meleeDamage(e, dmg, { canCrit: true, melee: true });
-      if (D.kind === 'spin') {
-        for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range) { hit(e); kb(e, 30); }
-      } else if (D.kind === 'slam') {
+      if (D.kind === 'spin') { for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range) { hit(e); kb(e, 30); } }
+      else if (D.kind === 'slam') {
         const ix = p.x + p.face * D.range * .6;
         for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range && (Math.sign(e.x - p.x) === p.face || Math.abs(e.x - p.x) < 40)) { hit(e); kb(e, D.kb); }
         G.rings.push({ x: ix, y: view.ground - 6, t: 0, life: .3, r1: D.shock });
         G.craters.push({ x: ix, t: 0, r: 14 });
         for (const e of G.enemies) if (Math.abs(e.x - ix) < D.shock && !e.dead) applyDamage(e, dmg * .5, { force: true });
-        shake(6); play('slam');
+        shake(6);
       } else {
-        let hits = 0, maxHits = D.kind === 'jab' ? 1 : 3;
+        let hits = 0; const maxHits = D.kind === 'jab' ? 1 : 3;
         for (const e of G.enemies) {
           const dx = e.x - p.x;
           if (Math.abs(dx) < D.range + e.s * .4 && (Math.sign(dx) === p.face || Math.abs(dx) < 40) && hits < maxHits) {
@@ -273,39 +259,28 @@ function kb(e, force) {
   if (force > 30) e.stun = Math.max(e.stun, .22);
 }
 function updTowers(dt) {
-  for (let i = 0; i < 2;i++) {
+  for (let i = 0; i < 2; i++) {
     const t = G.towers[i]; if (!t) continue;
     t.flash = Math.max(0, t.flash - dt); t.recoil = Math.max(0, t.recoil - dt * 4);
     for (let k = 0; k < t.trace.length; k++) t.trace[k] *= Math.pow(.05, dt);
     t.cd -= dt;
     const tx = towerX(i), def = TOWERS[t.type];
     let target = null, bd = 1e9;
-    for (const e of G.enemies) {
-      if (Math.abs(e.x - tx) > def.range) continue;
-      const threat = Math.abs(e.x - G.player.x);
-      if (threat < bd) { bd = threat; target = e; }
-    }
-    if (target) {
-      const want = Math.atan2((view.ground + target.gyOff - target.s * 1.5) - (view.ground - 70), target.x - tx);
-      t.aim += (want - t.aim) * Math.min(1, dt * 10);
-    }
+    for (const e of G.enemies) { if (Math.abs(e.x - tx) > def.range) continue; const th = Math.abs(e.x - G.player.x); if (th < bd) { bd = th; target = e; } }
+    if (target) { const want = Math.atan2((view.ground + target.gyOff - target.s * 1.5) - (view.ground - 70), target.x - tx); t.aim += (want - t.aim) * Math.min(1, dt * 10); }
     if (t.cd > 0 || G.phase !== 'wave' || !target) continue;
     t.cd = 1 / towerRate(t); t.flash = .08; t.recoil = 1;
     t.trace[t.ti % t.trace.length] = 1; t.ti++;
     const dmg = towerDmg(t);
-    if (t.type === 'mg') {
-      G.shots.push({ kind: 'mg', x: tx, y: view.ground - 70, tgt: target, lx: target.x, ly: view.ground + target.gyOff - target.s * 1.5, dmg, spd: 660 });
-      play('mg');
-    } else if (t.type === 'rail') {
-      const dir = Math.sign(target.x - tx) || 1, x1 = target.x + dir * 50;
-      const lo = Math.min(tx, x1), hi = Math.max(tx, x1);
+    if (t.type === 'mg') { G.shots.push({ kind: 'mg', x: tx, y: view.ground - 70, tgt: target, lx: target.x, ly: view.ground + target.gyOff - target.s * 1.5, dmg, spd: 660 }); play('mg'); }
+    else if (t.type === 'rail') {
+      const dir = Math.sign(target.x - tx) || 1, x1 = target.x + dir * 50, lo = Math.min(tx, x1), hi = Math.max(tx, x1);
       G.beams.push({ x0: tx, x1, y: view.ground - 34, t: 0, life: .14 });
       for (const e of G.enemies) if (e.x >= lo - 10 && e.x <= hi + 10) applyDamage(e, dmg, {});
       shake(2); play('rail');
     } else {
-      let lead = target.x;
       const dir = Math.sign(G.player.x - target.x) || 1;
-      lead = clamp(target.x + dir * target.spd * .7, 20, view.W - 20);
+      const lead = clamp(target.x + dir * target.spd * .7, 20, view.W - 20);
       G.shots.push({ kind: 'mt', x0: tx, y0: view.ground - 70, tx: lead, t: 0, T: .75, dmg, r: 80 });
       play('mortar');
     }
@@ -341,10 +316,7 @@ function updEnemies(dt) {
     }
     if (dist > e.stop) {
       e.x += dir * e.spd * dt; e.ph += e.spd * dt * .09;
-      if (t.boss || t.gait === 'stomp') {
-        const sn = Math.floor(e.ph / Math.PI);
-        if (sn !== e.lastStep) { e.lastStep = sn; shake(t.boss ? 1.6 : .5); if (t.boss) play('step'); }
-      }
+      if (t.boss || t.gait === 'stomp') { const sn = Math.floor(e.ph / Math.PI); if (sn !== e.lastStep) { e.lastStep = sn; shake(t.boss ? 1.6 : .5); if (t.boss) play('step'); } }
     } else {
       e.atkCd -= dt;
       if (e.atkCd <= 0) {
@@ -404,7 +376,7 @@ function updFx(dt) {
     if (p.ph === 0) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.t > .32) p.ph = 1; }
     else {
       const tgt = p.kind === 'gold' ? goldT : xpT;
-      const dx = tgt.x - p.x, dy = tgt.y - p.y, d = Math.hypot(dx, dy);
+      const dx = tgt.x - p.x, dy = tgt.y - p.y, d = Math.hypot(dx, dy) || 1;
       const sp = Math.min(1400, 340 + p.t * 900);
       if (d < 18) {
         p.done = true;
@@ -416,8 +388,6 @@ function updFx(dt) {
   G.pickups = G.pickups.filter(p => !p.done);
 }
 
-/* события прокачки во время боя */
-import { on } from './events.js';
 on('level', lvl => {
   if (!G || view.screen !== 'battle') return;
   G.lvlGained++;
@@ -427,11 +397,8 @@ on('level', lvl => {
   emit('banner', 'УРОВЕНЬ ' + lvl, '+3 ОЧКА · C — РАСПРЕДЕЛИТЬ', 'green');
   G.rings.push({ x: G.player.x, y: view.ground - 60, t: 0, life: .4, r1: 120, green: true });
 });
-on('stats', ({ hpDelta }) => {
-  if (!G || view.screen !== 'battle') return;
-  G.maxHp = D.maxHp; G.hp = Math.min(G.maxHp, G.hp + Math.max(0, hpDelta));
-});
-on('weapon', () => { if (G) { G.player.swing = -1; } });
+on('stats', ({ hpDelta }) => { if (!G || view.screen !== 'battle') return; G.maxHp = D.maxHp; G.hp = Math.min(G.maxHp, G.hp + Math.max(0, hpDelta)); });
+on('weapon', () => { if (G) G.player.swing = -1; });
 on('key', k => {
   if (view.screen !== 'battle' || !G || G.paused || G.panelPause || G.over) return;
   if (k === 'whirl') whirl();
