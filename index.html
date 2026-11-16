@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050505">
+<title>ЧЕРТА — stick defense</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050505'/%3E%3Cg stroke='%23fff' stroke-width='2' stroke-linecap='round' fill='none'%3E%3Ccircle cx='16' cy='7' r='3.4'/%3E%3Cpath d='M16 11v9M16 13l-6 5M16 13l6 5M16 20l-5 8M16 20l5 8'/%3E%3C/g%3E%3Cpath d='M4 29h24' stroke='%233ef08c' stroke-width='1.4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="grain"></div><div id="vig"></div><div id="lowhp"></div>
+
+<section id="hub" class="screen active">
+  <div class="hub-wrap">
+    <header class="hub-head">
+      <div class="logo">ЧЕР<em>ТА</em><span class="logo-sub">// STICK DEFENSE</span></div>
+      <div class="head-right">
+        <div class="gold-pill">¤<b id="hubGold">0</b></div>
+        <input id="nick" maxlength="16" spellcheck="false" autocomplete="off" placeholder="ПОЗЫВНОЙ">
+        <button id="btnMuteHub" class="icon-btn" aria-label="звук"></button>
+        <button id="btnSettingsHub" class="icon-btn" aria-label="настройки">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="hub-grid">
+      <aside class="side-left">
+        <section class="panel brawler">
+          <div class="panel-title">БОЕЦ</div>
+          <canvas id="preview"></canvas>
+          <div class="lvl-row">LV <b id="hubLevel">1</b> <button id="hubPts" class="pts-badge hidden">+0</button></div>
+          <div class="xpbar"><i id="hubXpFill"></i></div>
+          <div class="xp-text"><span id="hubXpText">0 / 50</span><span id="hubCap"></span></div>
+          <div id="statList"></div>
+          <button id="btnRespec" class="btn ghost small">СБРОС</button>
+        </section>
+        <section class="panel arsenal">
+          <div class="panel-title">АРСЕНАЛ</div>
+          <div id="weaponList" class="weapon-list"></div>
+        </section>
+      </aside>
+
+      <section class="center-col">
+        <div class="hero-block">
+          <h1 class="hero-title">ДЕРЖИ<br><em>ЧЕРТУ.</em></h1>
+          <p class="hero-sub">Волны идут с обеих сторон. Смерть — не конец: <b>уровень, статы, оружие и золото остаются</b>. Каждый забег — глубже.</p>
+        </div>
+        <button id="btnStart" class="btn primary huge">НАЧАТЬ ОБОРОНУ<span>ВОЛНА 1 · БЕСКОНЕЧНОСТЬ</span></button>
+        <div class="chips">
+          <div class="chip acc"><label>РЕКОРД</label><b id="hubBest">0</b></div>
+          <div class="chip gold"><label>ЗОЛОТО</label><b id="hubGold2">¤0</b></div>
+          <div class="chip"><label>ЗАБЕГОВ</label><b id="hubRuns">0</b></div>
+          <div class="chip"><label>УБИЙСТВ</label><b id="hubKills">0</b></div>
+        </div>
+        <div class="panel rules"><div class="panel-title">ПРАВИЛА</div><ul id="rulesList"></ul></div>
+      </section>
+
+      <aside class="panel board-panel">
+        <div class="panel-title">ЛИДЕРБОРД <span id="boardStatus" class="status"></span></div>
+        <div class="tabs">
+          <button class="tab active" data-tab="world">МИР</button>
+          <button class="tab" data-tab="local">ЛОКАЛЬНО</button>
+          <button id="btnBoardRefresh" class="icon-btn" aria-label="обновить">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 3v4h-4"/></svg>
+          </button>
+        </div>
+        <div id="boardMeta" class="board-meta"></div>
+        <div id="boardList" class="board-list"></div>
+      </aside>
+    </main>
+    <footer class="hub-foot">GITHUB PAGES · CLOUDFLARE WORKER · LOCALSTORAGE</footer>
+  </div>
+</section>
+
+<section id="battle" class="screen">
+  <canvas id="game"></canvas>
+  <div class="hud-top">
+    <div class="bar-block">
+      <label>ПРОЧНОСТЬ</label>
+      <div class="bar hpbar"><i id="hpFill"></i></div>
+      <span id="hpText">100 / 100</span>
+    </div>
+    <div class="wave-block">
+      <div id="waveNum">ГОТОВЬСЯ</div>
+      <div id="waveSub"></div>
+      <div id="bossWrap" class="hidden"><span id="bossName">КОЛОСС</span>
+        <div class="bar bossbar"><i id="bossFill"></i></div></div>
+      <button id="btnNext" class="btn small primary hidden">ВОЛНА 1 ▶&nbsp;<kbd>N</kbd></button>
+    </div>
+    <div class="bar-block xp-block">
+      <label>LV <b id="lvlNum">1</b> <button id="ptsBadge" class="pts-badge hidden">+0</button></label>
+      <div class="xpbar"><i id="xpFill"></i></div>
+      <span id="xpText">0 / 50</span>
+      <div class="mini-controls">
+        <button id="btnPause" class="icon-btn" aria-label="пауза">⏸</button>
+        <button id="btnSpeed" class="icon-btn" aria-label="скорость">1×</button>
+        <button id="btnMute" class="icon-btn" aria-label="звук"></button>
+      </div>
+    </div>
+  </div>
+  <div id="banner" class="hidden"><b id="bannerTitle"></b><span id="bannerSub"></span></div>
+  <div id="dock">
+    <button class="tcard empty" id="tcard0"></button>
+    <button class="tcard empty" id="tcard1"></button>
+    <div class="dock-sep"></div>
+    <button class="ab" id="btnAb1"><b>ВИХРЬ</b><kbd>SPACE</kbd><i class="cd" id="ab1cd"></i><span class="cds" id="ab1s"></span></button>
+    <button class="ab" id="btnAb2"><b>ЯРОСТЬ</b><kbd>E</kbd><i class="cd" id="ab2cd"></i><span class="cds" id="ab2s"></span></button>
+    <div class="dock-sep"></div>
+    <div class="counters">
+      <div class="gold" id="goldWrap">¤ <b id="goldVal">0</b></div>
+      <div class="kills">✕ <b id="killVal">0</b></div>
+    </div>
+  </div>
+  <div id="pauseChip" class="hidden">⏸ ПАУЗА</div>
+  <div id="pauseVeil" class="hidden">
+    <div class="pv-inner panel">
+      <h2>ПАУЗА</h2>
+      <button id="btnResume" class="btn primary">ПРОДОЛЖИТЬ</button>
+      <button id="btnAbandon" class="btn danger">ЗАВЕРШИТЬ ЗАБЕГ</button>
+      <p class="pv-hint">P / ESC · M — ЗВУК</p>
+    </div>
+  </div>
+</section>
+
+<div id="towerPop" class="pop panel hidden"></div>
+
+<div id="statsModal" class="modal hidden">
+  <div class="modal-card panel">
+    <button class="mclose" data-close>✕</button>
+    <h3>ОЧКИ СТАТОВ</h3>
+    <div class="mpts">СВОБОДНО <b id="mPts">0</b></div>
+    <div id="mStatList"></div>
+    <p class="mhint">SHIFT+КЛИК = +5 · ЛИМИТ РАСТЁТ С УРОВНЕМ · СБРОС В ШТАБЕ ЗА ЗОЛОТО</p>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-card panel">
+    <button class="mclose" data-close>✕</button>
+    <h3>НАСТРОЙКИ</h3>
+    <div class="set-row"><span>ЗВУК<small>СИНТЕЗ · M</small></span><button class="switch" id="setSound"></button></div>
+    <div class="set-row"><span>СКОРОСТЬ</span>
+      <div class="seg" id="setSpeed"><button data-speed="1">1×</button><button data-speed="2">2×</button></div></div>
+    <div class="set-row"><span>ТРЯСКА</span><button class="switch" id="setShake"></button></div>
+    <div class="set-row"><span>ЗЕРНО</span><button class="switch" id="setGrain"></button></div>
+    <div class="set-row"><span>ЧАСТИЦЫ</span>
+      <select id="setQuality"><option value="high">ПОЛНЫЕ</option><option value="med">УМЕРЕННЫЕ</option><option value="low">МИНИМУМ</option></select></div>
+    <div class="set-row" style="border-bottom:none;display:block">
+      <span>CLOUDFLARE WORKER<small>API ЛИДЕРБОРДА · ПУСТО = ЛОКАЛЬНО</small></span>
+      <div class="api-row"><input id="apiInput" placeholder="https://cherta-lb.имя.workers.dev" spellcheck="false"><button id="btnApi" class="btn small">ПРОВЕРИТЬ</button></div>
+      <div id="apiStatus"></div>
+    </div>
+    <div class="set-row" style="border-bottom:none"><span style="color:var(--red)">СТЕРЕТЬ СОХРАНЕНИЕ<small>УРОВЕНЬ, СТАТЫ, ЗОЛОТО, РЕКОРДЫ</small></span>
+      <button id="btnWipe" class="btn danger small">СТЕРЕТЬ</button></div>
+  </div>
+</div>
+
+<div id="summary" class="modal hidden" data-static>
+  <div class="modal-card panel summary-card">
+    <div class="sum-title" id="sumTitle">ЧЕРТА ПРОРВАНА</div>
+    <div class="sum-wave"><span>ДОШЁЛ ДО ВОЛНЫ</span><b id="sumWave">1</b><br><em id="sumRecord" class="hidden">НОВЫЙ РЕКОРД</em></div>
+    <div class="sum-grid">
+      <div class="chip"><label>УБИЙСТВ</label><b id="sumKills">0</b></div>
+      <div class="chip"><label>ВРЕМЯ</label><b id="sumTime">0:00</b></div>
+      <div class="chip"><label>УРОВНИ</label><b id="sumLvl" style="color:var(--acc)">+0</b></div>
+      <div class="chip gold"><label>ЗОЛОТО</label><b id="sumGold">+¤0</b></div>
+      <div class="chip acc"><label>ОПЫТ</label><b id="sumXp">+0</b></div>
+      <div class="chip"><label>УРОВЕНЬ</label><b id="sumLevel">1</b></div>
+    </div>
+    <div class="sum-submit">
+      <div class="api-row"><input id="sumNick" maxlength="16" spellcheck="false" placeholder="ПОЗЫВНОЙ"><button id="btnSubmit" class="btn small primary">ОТПРАВИТЬ</button></div>
+      <div id="submitStatus"></div>
+    </div>
+    <div class="sum-actions">
+      <button id="btnAgain" class="btn primary">ЕЩЁ ЗАБЕГ</button>
+      <button id="btnToHub" class="btn ghost">В ШТАБ</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
