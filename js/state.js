@@ -1,10 +1,10 @@
-import { BAL, STATS, WEAPONS, W_MAX, wUpCost } from './config.js';
-import { emit } from './events.js';
-import { uuid } from './utils.js';
+import { BAL, STATS, WEAPONS, W_MAX, wUpCost } from './config.js?v=8';
+import { emit } from './events.js?v=8';
+import { uuid } from './utils.js?v=8';
 
-const KEY = 'cherta_save_v6';
+const KEY = 'cherta_save_v8';
 const DEF = () => ({
-  v: 6, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
+  v: 8, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
   stats: { str: 0, agi: 0, vit: 0, pre: 0, eng: 0, lck: 0 },
   gold: BAL.startGold, best: 0, runs: 0, kills: 0, askResume: true,
   sound: true, speed: 1, shake: !matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -14,7 +14,7 @@ const DEF = () => ({
 });
 export let S = DEF();
 try {
-  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v5') || localStorage.getItem('cherta_save_v4') || localStorage.getItem('cherta_save_v3') || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
+  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v7') || localStorage.getItem('cherta_save_v6') || localStorage.getItem('cherta_save_v5') || localStorage.getItem('cherta_save_v4') || localStorage.getItem('cherta_save_v3') || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
   if (raw) {
     const p = JSON.parse(raw);
     S = Object.assign(DEF(), p);

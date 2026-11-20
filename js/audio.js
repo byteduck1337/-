@@ -1,4 +1,4 @@
-import { S } from './state.js';
+import { S } from './state.js?v=8';
 let AC = null, master = null, noiseBuf = null;
 export function init() {
   if (AC) return;

@@ -1,11 +1,11 @@
-import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon } from './state.js';
-import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost, NICK_COOLDOWN } from './config.js';
-import { on, emit } from './events.js';
-import { view } from './view.js';
-import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves } from './game.js';
-import { play, setMuted, init as audioInit } from './audio.js';
-import * as net from './net.js';
-import { fmtN, fmtT, esc, NICK_RE, clamp } from './utils.js';
+import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon } from './state.js?v=8';
+import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost } from './config.js?v=8';
+import { on, emit } from './events.js?v=8';
+import { view } from './view.js?v=8';
+import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves } from './game.js?v=8';
+import { play, setMuted, init as audioInit } from './audio.js?v=8';
+import { isConfigured, status, world, worldMeta, cooldownLeft, changeNick, fetchWorld, submitRun, recordLocal } from './net.js?v=8';
+import { fmtN, fmtT, esc, NICK_RE, clamp } from './utils.js?v=8';
 
 const $ = id => document.getElementById(id);
 const SND_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
@@ -16,12 +16,12 @@ const MENU = [
   { id: 'fight', t: 'В БОЙ', s: () => `волна 1 · рекорд ${S.best}` },
   { id: 'arsenal', t: 'АРСЕНАЛ', s: () => `${WEAPONS[S.weapon].name}${D.wLvl ? ' ур.' + D.wLvl : ''} · оружие и постройки` },
   { id: 'stats', t: 'ПРОКАЧКА', s: () => S.pts ? `+${S.pts} очка ждут` : `уровень ${S.level} · лимит ${D.cap}` },
-  { id: 'records', t: 'РЕКОРДЫ', s: () => net.status === 'ok' ? 'мировая таблица · онлайн' : 'локально · нет связи' },
+  { id: 'records', t: 'РЕКОРДЫ', s: () => status === 'ok' ? 'мировая таблица · онлайн' : 'локально · нет связи' },
   { id: 'settings', t: 'НАСТРОЙКИ', s: () => 'звук · скорость · зерно' },
 ];
 const derivedText = () => `УРОН <b>${Math.round(D.dmg)}</b> · ТЕМП <b>${D.rate.toFixed(2)}/с</b> · HP <b>${D.maxHp}</b> · КРИТ <b>${Math.round(D.crit * 100)}%</b> · УКЛОН <b>${Math.round(D.dodge * 100)}%</b>`;
-const connText = () => ({ ok: 'ПОДКЛЮЧЁН', load: 'СВЯЗЬ…', err: 'НЕТ СВЯЗИ', off: 'НЕ НАСТРОЕН' }[net.status] || '—');
-const connColor = () => ({ ok: 'var(--acc)', load: 'var(--gold)', err: 'var(--red)', off: 'var(--dim)' }[net.status] || 'var(--dim)');
+const connText = () => ({ ok: 'ПОДКЛЮЧЁН', load: 'СВЯЗЬ…', err: 'НЕТ СВЯЗИ', off: 'НЕ НАСТРОЕН' }[status] || '—');
+const connColor = () => ({ ok: 'var(--acc)', load: 'var(--gold)', err: 'var(--red)', off: 'var(--dim)' }[status] || 'var(--dim)');
 
 export function init() {
   buildMenu();
@@ -81,12 +81,12 @@ export function init() {
   on('wave:inter', () => renderSkip());
   on('boss', e => { $('bossWrap').classList.toggle('hidden', !e); if (e && G) $('bossName').textContent = ENEMIES[e.type].name + ' · ВОЛНА ' + G.wave; });
   on('board', () => { if (sheetName === 'records') renderSheet(); refreshMenuMeta(); });
-  on('screen', name => { if (name === 'menu') { closeSheet(); closePop(); refreshMenuMeta(); net.fetchWorld(); } });
+  on('screen', name => { if (name === 'menu') { closeSheet(); closePop(); refreshMenuMeta(); fetchWorld(); } });
 
   syncSound(); setSpeed(S.speed, true);
   $('grain').style.display = S.grain ? '' : 'none';
   refreshMenuMeta(); refreshGold(); refreshXp(); refreshWeaponHud(); renderPosts(); renderSkip();
-  net.fetchWorld();
+  fetchWorld();
 }
 function toggleSound() { audioInit(); setMuted(S.sound); syncSound(); saveSoon(); if (sheetName === 'settings') renderSheet(); }
 
@@ -227,7 +227,7 @@ function statsHTML() {
   return h;
 }
 function recordsHTML() {
-  const left = net.cooldownLeft();
+  const left = cooldownLeft();
   let h = `<h3>РЕКОРДЫ</h3><div class="sub">позывной уникален. смена — не чаще раза в 2 минуты.</div>
     <div class="nickrow"><label>ПОЗЫВНОЙ</label>
       <div class="apirow"><input id="nickInput" maxlength="16" value="${esc(S.nick)}" spellcheck="false" autocomplete="off"><button id="nickSave" class="ibtn small" ${left > 0 ? 'disabled' : ''}>СМЕНИТЬ</button></div>
@@ -235,12 +235,12 @@ function recordsHTML() {
     </div>
     <div class="tabs"><button class="tab ${boardTab === 'world' ? 'on' : ''}" data-tab="world">МИР</button><button class="tab ${boardTab === 'local' ? 'on' : ''}" data-tab="local">ЛОКАЛЬНО</button><button class="ibtn small" id="boardRefresh">↻</button></div>`;
   if (boardTab === 'local') h += S.board.length ? S.board.map(brow).join('') : `<div class="empty">пока пусто. первый забег ждёт.</div>`;
-  else if (!net.isConfigured()) h += `<div class="empty">мировая таблица не настроена.<br>адрес сервера задаётся один раз в js/config.js → API_BASE.</div>`;
-  else if (net.status !== 'ok') h += `<div class="empty">нет связи с сервером.<br>проверь воркер и адрес в js/config.js.</div>`;
-  else if (!net.world) h += `<div class="empty">загрузка таблицы…</div>`;
+  else if (!isConfigured()) h += `<div class="empty">мировая таблица не настроена.</div>`;
+  else if (status !== 'ok') h += `<div class="empty">нет связи с сервером.</div>`;
+  else if (!world) h += `<div class="empty">загрузка таблицы…</div>`;
   else {
-    h += `<div class="hintline" style="margin:0 0 8px">${net.worldMeta?.total ?? net.world.length} бойцов · рекорд волна ${net.worldMeta?.top ?? 0}</div>`;
-    h += net.world.length ? net.world.map(brow).join('') : `<div class="empty">таблица пуста. стань первым.</div>`;
+    h += `<div class="hintline" style="margin:0 0 8px">${worldMeta?.total ?? world.length} бойцов · рекорд волна ${worldMeta?.top ?? 0}</div>`;
+    h += world.length ? world.map(brow).join('') : `<div class="empty">таблица пуста. стань первым.</div>`;
   }
   return h;
 }
@@ -266,15 +266,15 @@ function bindSheet() {
   b.querySelectorAll('[data-upw]').forEach(el => el.addEventListener('click', () => { if (upgradeWeapon(el.dataset.upw)) play('up'); else play('err'); }));
   b.querySelectorAll('[data-stat]').forEach(el => el.addEventListener('click', e => { if (addStat(el.dataset.stat, e.shiftKey ? 5 : 1)) play('up'); else play('err'); }));
   const rs = b.querySelector('#respecBtn'); if (rs) rs.addEventListener('click', () => { if (respec()) { play('build'); toast('Статы сброшены. Очки возвращены.', 'gold'); } else play('err'); });
-  b.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { boardTab = el.dataset.tab; play('click'); renderSheet(); if (boardTab === 'world') net.fetchWorld(); }));
-  const rf = b.querySelector('#boardRefresh'); if (rf) rf.addEventListener('click', () => { play('click'); boardTab === 'world' ? net.fetchWorld() : renderSheet(); });
+  b.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { boardTab = el.dataset.tab; play('click'); renderSheet(); if (boardTab === 'world') fetchWorld(); }));
+  const rf = b.querySelector('#boardRefresh'); if (rf) rf.addEventListener('click', () => { play('click'); boardTab === 'world' ? fetchWorld() : renderSheet(); });
   const ni = b.querySelector('#nickInput'), ns = b.querySelector('#nickSave');
   if (ns) ns.addEventListener('click', async () => {
     const st = b.querySelector('#nickStatus');
     const v = ni.value.trim().replace(/\s+/g, ' ').toUpperCase();
     if (!NICK_RE.test(v)) { st.textContent = '✗ позывной: 3–16 символов (буквы, цифры, _ -)'; st.style.color = 'var(--red)'; play('err'); return; }
     ns.disabled = true; ns.textContent = '…'; st.textContent = 'проверяю…'; st.style.color = 'var(--dim)';
-    const r = await net.changeNick(v);
+    const r = await changeNick(v);
     if (r.ok) { st.textContent = '✓ позывной обновлён'; st.style.color = 'var(--acc)'; ni.value = r.nick; refreshMenuMeta(); play('up'); }
     else { st.textContent = '✗ ' + r.error; st.style.color = 'var(--red)'; play('err'); }
     updateNickUI();
@@ -286,13 +286,13 @@ function bindSheet() {
   const sa = b.querySelector('#setAsk'); if (sa) sa.addEventListener('click', () => { S.askResume = !S.askResume; saveSoon(); play('click'); renderSheet(); });
   b.querySelectorAll('[data-q]').forEach(el => el.addEventListener('click', () => { S.quality = el.dataset.q; saveSoon(); emit('quality'); play('click'); renderSheet(); }));
   const wp = b.querySelector('#wipeBtn');
-  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
+  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v8', 'cherta_save_v7', 'cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
 }
 function startNickTicker() { stopNickTicker(); nickTimer = setInterval(updateNickUI, 1000); }
 function stopNickTicker() { if (nickTimer) { clearInterval(nickTimer); nickTimer = null; } }
 function updateNickUI() {
   const btn = $('nickSave'), st = $('nickStatus'); if (!btn) return;
-  const left = net.cooldownLeft();
+  const left = cooldownLeft();
   if (left > 0) { btn.disabled = true; btn.textContent = `СМЕНИТЬ (${left}с)`; if (st && !st.textContent.startsWith('✗') && !st.textContent.startsWith('✓')) st.textContent = `следующая смена через ${left}с`; }
   else { btn.disabled = false; btn.textContent = 'СМЕНИТЬ'; }
 }
@@ -363,7 +363,7 @@ function toast(msg, cls = '') {
 function showSummary(d) {
   lastSummary = d;
   const boardWave = Math.max(1, d.cleared);
-  net.recordLocal({ nick: S.nick, wave: boardWave, kills: d.kills, level: d.level, time: d.time, date: Date.now() });
+  recordLocal({ nick: S.nick, wave: boardWave, kills: d.kills, level: d.level, time: d.time, date: Date.now() });
   $('sumTitle').textContent = d.reason === 'death' ? 'ЧЕРТА ПРОРВАНА' : 'ВЫЛАЗКА ЗАВЕРШЕНА';
   $('sumTitle').classList.toggle('red', d.reason === 'death');
   $('sumWave').textContent = d.wave;
@@ -375,7 +375,7 @@ function showSummary(d) {
   $('sumNick').value = S.nick;
   const st = $('submitStatus'), btn = $('btnSubmit');
   st.textContent = ''; st.className = ''; btn.disabled = false; btn.textContent = 'ОТПРАВИТЬ РЕКОРД';
-  if (!net.isConfigured() || net.status !== 'ok') { btn.disabled = true; btn.textContent = 'ЛОКАЛЬНО ✓'; st.textContent = 'рекорд сохранён на устройстве · сервер недоступен'; }
+  if (!isConfigured() || status !== 'ok') { btn.disabled = true; btn.textContent = 'ЛОКАЛЬНО ✓'; st.textContent = 'рекорд сохранён на устройстве · сервер недоступен'; }
   $('summary').classList.remove('hidden');
   refreshMenuMeta();
 }
@@ -384,11 +384,11 @@ async function onSubmit() {
   const btn = $('btnSubmit'), st = $('submitStatus');
   btn.disabled = true; btn.textContent = 'ОТПРАВКА…';
   try {
-    const r = await net.submitRun({ wave: Math.max(1, lastSummary.cleared), kills: lastSummary.kills, level: lastSummary.level, time: lastSummary.time, runId: lastSummary.runId });
+    const r = await submitRun({ wave: Math.max(1, lastSummary.cleared), kills: lastSummary.kills, level: lastSummary.level, time: lastSummary.time, runId: lastSummary.runId });
     if (r.ok && r.data?.ok) {
       G.submitted = true; btn.textContent = 'ПРИНЯТО ✓';
       st.textContent = r.data.kept ? 'сервер оставил твой лучший результат' : '✓ рекорд в мировой таблице';
-      st.className = 'ok'; play('up'); setTimeout(net.fetchWorld, 600);
+      st.className = 'ok'; play('up'); setTimeout(fetchWorld, 600);
     } else { btn.disabled = false; btn.textContent = 'ПОВТОРИТЬ'; st.textContent = '✗ ' + (r.data?.error || 'ошибка ' + r.status); st.className = 'err'; play('err'); }
   } catch (e) { btn.disabled = false; btn.textContent = 'ПОВТОРИТЬ'; st.textContent = '✗ воркер недоступен — сохранено локально'; st.className = 'err'; play('err'); }
 }

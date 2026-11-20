@@ -1,9 +1,9 @@
-import { view } from './view.js';
-import { S, D } from './state.js';
-import { slotX, bDmg, bRate } from './game.js';
-import { ENEMIES, BUILDINGS, WEAPONS, QUAL, SLOTS } from './config.js';
-import { jit, rnd, TAU, lerp, clamp, easeOut } from './utils.js';
-import { on } from './events.js';
+import { view } from './view.js?v=8';
+import { S, D } from './state.js?v=8';
+import { slotX, bDmg, bRate } from './game.js?v=8';
+import { ENEMIES, BUILDINGS, WEAPONS, QUAL, SLOTS } from './config.js?v=8';
+import { jit, rnd, TAU, lerp, clamp, easeOut } from './utils.js?v=8';
+import { on } from './events.js?v=8';
 
 const INK = '#f2f2ee', ACC = '#46f28e', GOLD = '#f5b942', RED = '#ff4b4b', BLUE = '#5db4ff';
 let motes = [];
@@ -139,8 +139,6 @@ function figure(c, f) {
 function drawBuilding(c, G, i) {
   const b = G.buildings[i], tx = slotX(i), gy = view.ground;
   if (!b) {
-    /* пустой пост — только маленькая площадка на земле, без коробок и подписей:
-       вся информация о посте живёт в доке, оверлеи не дублируются */
     const hov = G.hoverSlot === i;
     c.strokeStyle = hov ? 'rgba(70,242,142,.7)' : 'rgba(242,242,238,.22)';
     c.lineWidth = 1.5; c.setLineDash([3, 4]);

@@ -1,10 +1,13 @@
-import { API_BASE, NICK_COOLDOWN } from './config.js';
-import { S, setIdentity, setNick, saveSoon, saveNow, pushLocal } from './state.js';
-import { emit } from './events.js';
-import { uuid, NICK_RE } from './utils.js';
+import { API_BASE } from './config.js?v=8';
+import { S, setIdentity, setNick, saveSoon, saveNow, pushLocal } from './state.js?v=8';
+import { emit } from './events.js?v=8';
+import { uuid, NICK_RE } from './utils.js?v=8';
+
+/* Единственный источник кулдауна ника. Не реэкспортируется ниоткуда. */
+const NICK_COOLDOWN = 120;
 
 export const isConfigured = () => !!API_BASE;
-export let status = 'off';      // off | load | ok | err
+export let status = 'off';
 export let identityReady = false;
 export let world = null, worldMeta = null;
 
@@ -53,7 +56,7 @@ export async function initIdentity() {
       if (r.status === 401) {
         const id = uuid(), token = newToken();
         r = await api('/api/player/create', { id, token, nick: S.nick });
-        if (r.ok && r.data?.ok) { setIdentity(id, token); }
+        if (r.ok && r.data?.ok) setIdentity(id, token);
       }
       if (r.ok && r.data?.ok) {
         setNick(r.data.nick); S.nickChangedAt = r.data.nickChangedAt || 0; saveNow();

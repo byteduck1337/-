@@ -1,10 +1,10 @@
-import { BAL, ENEMIES, BUILDINGS, bUpCost, SLOTS, BOSS_ORDER, skipCost } from './config.js';
-import { S, D, calc, gainGold, gainXp, saveNow, saveSoon, newRunId } from './state.js';
-import { on, emit } from './events.js';
-import { view } from './view.js';
-import { clamp, rnd, TAU } from './utils.js';
-import { play, weaponSound } from './audio.js';
-import { keys, pointer } from './input.js';
+import { BAL, ENEMIES, BUILDINGS, bUpCost, SLOTS, BOSS_ORDER, skipCost } from './config.js?v=8';
+import { S, D, calc, gainGold, gainXp, saveNow, saveSoon, newRunId } from './state.js?v=8';
+import { on, emit } from './events.js?v=8';
+import { view } from './view.js?v=8';
+import { clamp, rnd, TAU } from './utils.js?v=8';
+import { play, weaponSound } from './audio.js?v=8';
+import { keys, pointer } from './input.js?v=8';
 
 export let G = null;
 

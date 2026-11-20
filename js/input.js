@@ -1,6 +1,6 @@
-import { view } from './view.js';
-import { emit } from './events.js';
-import { init as audioInit, resume } from './audio.js';
+import { view } from './view.js?v=8';
+import { emit } from './events.js?v=8';
+import { init as audioInit, resume } from './audio.js?v=8';
 
 export const keys = new Set();
 export const pointer = { dragX: null };

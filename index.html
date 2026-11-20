@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body>
 <div id="grain"></div><div id="vig"></div><div id="lowhp"></div>
@@ -124,7 +124,7 @@
       <div><label>БОЕЦ</label><b id="sumLevel"></b></div>
     </div>
     <div class="sum-send">
-      <div class="apirow"><input id="sumNick" maxlength="16" spellcheck="false" placeholder="ПОЗЫВНОЙ"><button id="btnSubmit" class="ibtn fill small">ОТПРАВИТЬ РЕКОРД</button></div>
+      <div class="apirow"><input id="sumNick" maxlength="16" spellcheck="false" placeholder="ПОЗЫВНОЙ" disabled><button id="btnSubmit" class="ibtn fill small">ОТПРАВИТЬ РЕКОРД</button></div>
       <div id="submitStatus"></div>
     </div>
     <div class="sum-actions">
@@ -149,6 +149,6 @@ window.addEventListener('error', function (e) {
 window.addEventListener('unhandledrejection', function (e) { window.__bootFail(String(e.reason && e.reason.message || e.reason)); });
 setTimeout(function () { if (!window.__booted) window.__bootFail('игра не запустилась — открой консоль (F12) и проверь 404 по js/.'); }, 5000);
 </script>
-<script type="module" src="js/main.js?v=5" onerror="__bootFail('не загружен js/main.js')"></script>
+<script type="module" src="js/main.js?v=8" onerror="__bootFail('не загружен js/main.js')"></script>
 </body>
 </html>

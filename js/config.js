@@ -1,4 +1,5 @@
-export const DEFAULT_API = '';
+/* Общий сервер всех игроков. Один адрес на всех, меняется только здесь. */
+export const API_BASE = 'https://g3g.okeysexsex.workers.dev';
 
 export const BAL = {
   startGold: 200, ptsPerLevel: 3,
@@ -17,7 +18,6 @@ export const BAL = {
   armor: w => 2 + w * .35,
 };
 
-/* Пропуск волн: 25% / 50% текущих средств, но никогда не бесплатно. */
 export const skipCost = (gold, n) => Math.max(n === 5 ? 25 : 50, Math.ceil(gold * (n === 5 ? .25 : .5)));
 
 export const STATS = [
