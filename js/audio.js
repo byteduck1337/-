@@ -40,8 +40,6 @@ export const SFX = {
   click: () => tone('square', 880, 660, .05, .07),
   jab: () => noise(.07, .09, 900, 'bandpass', 2200),
   swing: () => noise(.13, .12, 400, 'bandpass', 1700),
-  crack: () => { noise(.09, .2, 1400, 'bandpass', 500); tone('triangle', 240, 90, .1, .18); },
-  slash: () => { noise(.12, .12, 2400, 'highpass', 700); tone('sine', 1800, 500, .1, .06); },
   slam: () => { noise(.3, .3, 420, 'lowpass', 60); tone('sine', 75, 38, .38, .3); },
   reap: () => { noise(.26, .16, 300, 'bandpass', 2600); tone('sine', 160, 320, .22, .08); },
   hit: () => { tone('triangle', 180, 90, .07, .14); noise(.03, .07, 2400, 'highpass'); },
@@ -56,6 +54,7 @@ export const SFX = {
   mg: () => { noise(.04, .05, 2000, 'bandpass'); tone('square', 420, 300, .03, .03); },
   mortar: () => tone('sine', 130, 60, .18, .13),
   boom: () => { noise(.35, .28, 420, 'lowpass', 60); tone('sine', 70, 40, .4, .28); },
+  zap: () => { tone('square', 2200, 400, .1, .08); noise(.08, .06, 4000, 'highpass', 900); },
   hurt: () => { tone('sawtooth', 200, 80, .12, .18); noise(.06, .09, 700, 'lowpass'); },
   dodge: () => tone('sine', 1500, 1900, .05, .06),
   miss: () => tone('sine', 700, 500, .06, .05),
@@ -67,6 +66,9 @@ export const SFX = {
   err: () => { tone('square', 160, 160, .09, .1); tone('square', 120, 120, .12, .1, .1); },
   step: () => { tone('sine', 70, 45, .1, .12); noise(.05, .05, 200, 'lowpass'); },
   spit: () => tone('sawtooth', 600, 240, .12, .05),
+  heal: () => { tone('sine', 660, 880, .12, .07); tone('sine', 880, 1100, .14, .06, .1); },
+  summon: () => { tone('sawtooth', 90, 180, .3, .08); noise(.25, .06, 400, 'bandpass', 900); },
+  warp: () => { tone('sine', 220, 880, .3, .1); tone('sine', 330, 1320, .3, .08, .08); noise(.3, .06, 800, 'bandpass', 2400); },
 };
 export const play = name => { try { SFX[name] && SFX[name](); } catch (e) {} };
 export const weaponSound = kind => ({ jab: 'jab', swing: 'swing', slam: 'slam', spin: 'reap' }[kind] || 'swing');
