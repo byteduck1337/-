@@ -1,4 +1,4 @@
-import { BAL, ENEMIES, TOWERS, tUpCost } from './config.js';
+import { BAL, ENEMIES, BUILDINGS, bUpCost, SLOTS, BOSS_ORDER, skipCost } from './config.js';
 import { S, D, calc, gainGold, gainXp, saveNow, saveSoon, newRunId } from './state.js';
 import { on, emit } from './events.js';
 import { view } from './view.js';
@@ -8,54 +8,74 @@ import { keys, pointer } from './input.js';
 
 export let G = null;
 
-export function startRun() {
+export function startRun(startWave = 1) {
   calc();
+  startWave = Math.max(1, Math.floor(startWave));
   G = {
-    t: 0, wave: 0, cleared: 0, phase: 'inter', interT: 6, waveT: 0,
-    player: { x: view.cx || innerWidth / 2, face: 1, ph: 0, atkCd: 0, swing: -1, swingKind: D.kind, deadT: 0, seed: rnd(1000) },
+    t: 0, wave: startWave - 1, cleared: startWave - 1, startWave, skipped: 0,
+    phase: 'inter', interT: startWave > 1 ? 4 : 6, waveT: 0,
+    player: { x: view.cx || innerWidth / 2, face: 1, ph: 0, atkCd: 0, swing: -1, swingKind: D.kind, deadT: 0, seed: rnd(1000), moving: false },
     hp: D.maxHp, maxHp: D.maxHp,
     ab1: 0, ab1Max: D.whirlCd, ab2: 0, ab2Max: 22, rage: 0,
-    towers: [null, null], enemies: [], spawnQ: [], shots: [], eShots: [], beams: [],
+    buildings: Array(SLOTS).fill(null), enemies: [], spawnQ: [], shots: [], eShots: [], beams: [], zaps: [],
     parts: [], texts: [], pickups: [], rings: [], craters: [], slashes: [],
     kills: 0, goldEarned: 0, xpEarned: 0, lvlGained: 0, runId: newRunId(), submitted: false,
     shake: 0, paused: false, panelPause: false, over: false, deathDone: false, prevBest: S.best,
-    boss: null, hoverTower: -1,
+    boss: null, hoverSlot: -1,
   };
   emit('run:start', G);
-  emit('banner', 'ГОТОВЬСЯ', 'ВОЛНА 1 ЧЕРЕЗ 6 СЕК · N — РАНЬШЕ', '');
-  emit('wave:inter', 1);
-  play('horn');
-  if (!S.seenHint) { S.seenHint = true; saveSoon(); setTimeout(() => emit('toast', 'Кликни по посту внизу — построй башню. Золото уже есть.', 'gold'), 1200); }
+  emit('banner', startWave > 1 ? 'ВОЗВРАТ К ЧЕРТЕ' : 'ГОТОВЬСЯ', `ВОЛНА ${startWave} ЧЕРЕЗ ${G.interT} СЕК · N — РАНЬШЕ`, startWave > 1 ? 'green' : '');
+  emit('wave:inter', startWave);
+  play(startWave > 1 ? 'warp' : 'horn');
+  if (!S.seenHint) { S.seenHint = true; saveSoon(); setTimeout(() => emit('toast', '4 поста внизу. Строй башни, шипы, стену, генератор — золото уже есть.', 'gold'), 1200); }
   return G;
+}
+export function skipWaves(n) {
+  if (!G || G.phase !== 'inter' || G.over) return false;
+  const cost = skipCost(S.gold, n);
+  if (S.gold < cost) return false;
+  S.gold -= cost;
+  G.wave += n; G.skipped += n;
+  G.interT = Math.max(G.interT, 4);
+  if (G.wave > S.best) S.best = G.wave;
+  emit('gold', S.gold);
+  emit('banner', `ПРОПУЩЕНО ${n} ВОЛН`, `−¤${cost} · следующая волна ${G.wave + 1} · наград за пропуск нет`, 'gold');
+  emit('wave:inter', G.wave + 1);
+  play('warp'); saveSoon();
+  return true;
 }
 export function pause(on) { if (!G || G.phase === 'over' || G.phase === 'dying') return; G.paused = on; emit('pause', on); }
 export function panelPause(on) { if (G) { G.panelPause = on; emit('panelPause', on); } }
 
-export function towerX(i) { return view.cx + (i === 0 ? -1 : 1) * Math.min(200, view.W * .26); }
-export function towerDmg(t) { return TOWERS[t.type].dmg * Math.pow(1.32, t.lvl - 1) * D.tDmg; }
-export function towerRate(t) { return Math.min(6, TOWERS[t.type].rate * (1 + .06 * (t.lvl - 1)) * D.tRate); }
-export function buildTower(i, type) {
-  if (!G || G.towers[i] || !TOWERS[type] || S.gold < TOWERS[type].cost) return false;
-  S.gold -= TOWERS[type].cost;
-  G.towers[i] = { type, lvl: 1, cd: rnd(.2, .6), spent: TOWERS[type].cost, trace: new Array(32).fill(0), ti: 0, flash: 0, aim: 0, recoil: 0 };
-  play('build'); emit('gold', S.gold); emit('towers'); saveSoon();
-  burst(towerX(i), view.ground - 40, 10, '#46f28e', 140, 200);
+export function slotX(i) { const spread = Math.min(300, view.W * .34); return view.cx + [-1, -.5, .5, 1][i] * spread; }
+export function bDmg(b) { return (BUILDINGS[b.type].dmg || 0) * Math.pow(1.32, b.lvl - 1) * D.tDmg; }
+export function bRate(b) { return Math.min(6, (BUILDINGS[b.type].rate || 1) * (1 + .06 * (b.lvl - 1)) * D.tRate); }
+export function buildBuilding(i, type) {
+  const def = BUILDINGS[type];
+  if (!G || G.buildings[i] || !def || S.gold < def.cost) return false;
+  S.gold -= def.cost;
+  const b = { type, lvl: 1, cd: rnd(.2, .6), spent: def.cost, trace: new Array(32).fill(0), ti: 0, flash: 0, aim: 0, recoil: 0, timer: 0 };
+  if (type === 'wall') { b.maxHp = def.hp * (1 + .08 * S.stats.eng); b.hp = b.maxHp; }
+  G.buildings[i] = b;
+  play('build'); emit('gold', S.gold); emit('buildings'); saveSoon();
+  burst(slotX(i), view.ground - 40, 10, '#46f28e', 140, 200);
   return true;
 }
-export function upgradeTower(i) {
-  const t = G?.towers[i]; if (!t) return false;
-  const cost = tUpCost(t.type, t.lvl);
+export function upgradeBuilding(i) {
+  const b = G?.buildings[i]; if (!b) return false;
+  const cost = bUpCost(b.type, b.lvl);
   if (S.gold < cost) return false;
-  S.gold -= cost; t.lvl++; t.spent += cost; t.flash = .15;
-  play('up'); emit('gold', S.gold); emit('towers'); saveSoon();
-  burst(towerX(i), view.ground - 40, 8, '#f5b942', 120, 200);
+  S.gold -= cost; b.lvl++; b.spent += cost; b.flash = .15;
+  if (b.type === 'wall') { b.maxHp = BUILDINGS.wall.hp * Math.pow(1.55, b.lvl - 1) * (1 + .08 * S.stats.eng); b.hp = b.maxHp; }
+  play('up'); emit('gold', S.gold); emit('buildings'); saveSoon();
+  burst(slotX(i), view.ground - 40, 8, '#f5b942', 120, 200);
   return true;
 }
-export function sellTower(i) {
-  const t = G?.towers[i]; if (!t) return false;
-  G.towers[i] = null; gainGold(Math.floor(t.spent * .5));
-  play('build'); emit('towers');
-  burst(towerX(i), view.ground - 40, 8, '#f2f2ee', 120);
+export function sellBuilding(i) {
+  const b = G?.buildings[i]; if (!b) return false;
+  G.buildings[i] = null; gainGold(Math.floor(b.spent * .5));
+  play('build'); emit('buildings');
+  burst(slotX(i), view.ground - 40, 8, '#f2f2ee', 120);
   return true;
 }
 
@@ -63,31 +83,37 @@ function beginWave(n) {
   G.wave = n; G.waveT = 0; G.phase = 'wave'; G.boss = null;
   const bossWave = n % 5 === 0;
   let count = BAL.count(n); if (bossWave) count = Math.ceil(count * .6);
-  const pool = Object.keys(ENEMIES).filter(k => k !== 'boss' && ENEMIES[k].from <= n);
+  const pool = Object.keys(ENEMIES).filter(k => !ENEMIES[k].boss && ENEMIES[k].from <= n);
   const q = []; let d = .5;
   for (let i = 0; i < count; i++) {
     let type = 'walk';
-    if (pool.length > 1 && Math.random() < .62) { const alt = pool.filter(k => k !== 'walk'); type = alt[Math.floor(rnd(alt.length))]; }
+    if (pool.length > 1 && Math.random() < .66) { const alt = pool.filter(k => k !== 'walk'); type = alt[Math.floor(rnd(alt.length))]; }
     d += BAL.interval(n) * rnd(.7, 1.3);
     q.push({ type, side: Math.random() < .5 ? -1 : 1, at: d });
   }
-  if (bossWave) q.splice(Math.floor(q.length / 2), 0, { type: 'boss', side: Math.random() < .5 ? -1 : 1, at: d + BAL.interval(n) });
+  if (bossWave) {
+    const id = BOSS_ORDER[Math.floor(n / 5 - 1) % BOSS_ORDER.length];
+    q.splice(Math.floor(q.length / 2), 0, { type: id, side: Math.random() < .5 ? -1 : 1, at: d + BAL.interval(n) });
+  }
   G.spawnQ = q;
-  emit('banner', 'ВОЛНА ' + n, bossWave ? '⚠ КОЛОСС ИДЁТ ⚠' : q.length + ' ВРАГОВ', bossWave ? 'red' : '');
+  emit('banner', 'ВОЛНА ' + n, bossWave ? '⚠ ' + ENEMIES[BOSS_ORDER[Math.floor(n / 5 - 1) % BOSS_ORDER.length]].name + ' ИДЁТ ⚠' : q.length + ' ВРАГОВ', bossWave ? 'red' : '');
   play('horn');
 }
-function spawnEnemy(spec) {
-  const t = ENEMIES[spec.type], w = G.wave;
+function makeEnemy(type, x, hpMul = 1) {
+  const t = ENEMIES[type], w = G.wave;
   const e = {
-    type: spec.type, x: spec.side < 0 ? -40 : view.W + 40, gyOff: rnd(-12, 8),
-    s: t.s * rnd(.92, 1.08), hp: BAL.eHp(w) * t.hp, spd: BAL.eSpd(w) * t.spd * rnd(.88, 1.14),
-    dmg: BAL.eDmg(w) * t.dmg, ph: rnd(6), seed: rnd(1000), stop: t.boss ? 70 : 30 + rnd(26),
-    atkCd: rnd(.4, 1), wind: 0, flash: 0, stun: 0, face: spec.side < 0 ? 1 : -1, dead: false, lastStep: 0,
-    freq: rnd(.82, 1.22), asym: rnd(-.2, .2), armAmp: rnd(.6, 1.35), tilt: rnd(-.12, .12), fuse: 0,
+    type, x, gyOff: t.fly ? -70 : rnd(-12, 8),
+    s: t.s * rnd(.92, 1.08), hp: BAL.eHp(w) * t.hp * hpMul, spd: BAL.eSpd(w) * t.spd * rnd(.88, 1.14),
+    dmg: BAL.eDmg(w) * t.dmg, ph: rnd(6), seed: rnd(1000), stop: t.boss ? 70 : (t.reach || 30 + rnd(26)),
+    atkCd: rnd(.4, 1), wind: 0, flash: 0, stun: 0, face: x < G.player.x ? 1 : -1, dead: false, lastStep: 0,
+    freq: rnd(.82, 1.22), asym: rnd(-.2, .2), armAmp: rnd(.6, 1.35), tilt: rnd(-.12, .12),
+    fuse: 0, sumCd: rnd(2, 5), chargeCd: rnd(3, 6), charge: 0, high: !!t.fly,
   };
   e.maxHp = e.hp; G.enemies.push(e);
   if (t.boss) { G.boss = e; emit('boss', e); }
+  return e;
 }
+function spawnEnemy(spec) { makeEnemy(spec.type, spec.side < 0 ? -40 : view.W + 40); }
 function onClear() {
   G.cleared = G.wave;
   const bossWave = G.wave % 5 === 0;
@@ -97,7 +123,8 @@ function onClear() {
   gainGold(g); gainXp(x);
   const heal = Math.min(G.maxHp * .5, G.maxHp * (.2 + .02 * S.stats.vit));
   G.hp = Math.min(G.maxHp, G.hp + heal);
-  emit('banner', 'ВОЛНА ' + G.wave + ' ЗАЧИЩЕНА', `+¤${g} · +${x} XP · +${Math.round(heal)} HP`, 'green');
+  G.buildings.forEach(b => { if (b?.type === 'wall') b.hp = Math.min(b.maxHp, b.hp + b.maxHp * .35); });
+  emit('banner', 'ВОЛНА ' + G.wave + ' ЗАЧИЩЕНА', `+¤${g} · +${x} XP · стены починены`, 'green');
   play('clear');
   G.phase = 'inter'; G.interT = G.wave < 3 ? 6 : 9;
   emit('wave:inter', G.wave + 1); emit('boss', null);
@@ -142,14 +169,14 @@ function applyDamage(e, dmg, opts = {}) {
 function kill(e, over = 0) {
   e.dead = true; G.kills++; S.kills++;
   const t = ENEMIES[e.type], w = G.wave, gy = view.ground + e.gyOff;
-  burst(e.x, gy - e.s * 1.4, Math.round((t.boss ? 26 : 8) * (1 + Math.min(1.5, over))), '#f2f2ee', t.boss ? 260 : 170);
+  burst(e.x, gy - e.s * 1.4, Math.round((t.boss ? 26 : 8) * (1 + Math.min(1.5, over))), t.boss ? '#ff4b4b' : '#f2f2ee', t.boss ? 260 : 170);
   const goldVal = Math.round(BAL.killGold(w) * t.gold * D.goldM * rnd(.9, 1.2));
   const xpVal = Math.round(BAL.killXp(w) * t.xp * D.xpM);
   const coins = t.boss ? 5 : goldVal > 6 ? 2 : 1;
   for (let i = 0; i < coins; i++) G.pickups.push({ kind: 'gold', x: e.x, y: gy - e.s, vx: rnd(-90, 90), vy: rnd(-220, -120), val: Math.ceil(goldVal / coins), t: 0, ph: 0 });
   const motes = t.boss ? 3 : 1;
   for (let i = 0; i < motes; i++) G.pickups.push({ kind: 'xp', x: e.x, y: gy - e.s * 1.6, vx: rnd(-70, 70), vy: rnd(-190, -100), val: Math.ceil(xpVal / motes), t: 0, ph: 0 });
-  if (t.boss) { play('boom'); shake(9); G.boss = null; emit('boss', null); emit('banner', 'КОЛОСС ПОВЕРЖЕН', `+¤${goldVal} · +${xpVal} XP`, 'green'); G.craters.push({ x: e.x, t: 0, r: 34 }); }
+  if (t.boss) { play('boom'); shake(9); G.boss = null; emit('boss', null); emit('banner', t.name + ' ПОВЕРЖЕН', `+¤${goldVal} · +${xpVal} XP`, 'green'); G.craters.push({ x: e.x, t: 0, r: 34 }); }
   else play('kill');
   saveSoon();
 }
@@ -168,8 +195,8 @@ export function endRun(reason) {
   S.runs++;
   const record = G.wave > S.prevBest;
   if (G.wave > S.best) S.best = G.wave;
-  const data = { reason, wave: G.wave, kills: G.kills, time: Math.floor(G.t), gold: G.goldEarned, xp: G.xpEarned, lvl: G.lvlGained, level: S.level, record, runId: G.runId };
-  saveNow(); emit('run:end', data);
+  saveNow();
+  emit('run:end', { reason, wave: G.wave, cleared: G.cleared, startWave: G.startWave, skipped: G.skipped, kills: G.kills, time: Math.floor(G.t), gold: G.goldEarned, xp: G.xpEarned, lvl: G.lvlGained, level: S.level, record, runId: G.runId });
 }
 export function whirl() {
   if (!G || G.ab1 > 0 || (G.phase !== 'wave' && G.phase !== 'inter')) return;
@@ -193,6 +220,14 @@ export function rage() {
   play('rage'); emit('banner', 'ЯРОСТЬ', '+60% ТЕМП · +40% УРОН · 6 СЕК', 'green');
   burst(G.player.x, view.ground - 80, 14, '#46f28e', 200, 100);
 }
+function auraMult() {
+  let dmg = 1, rate = 1;
+  for (let i = 0; i < SLOTS; i++) {
+    const b = G.buildings[i];
+    if (b?.type === 'totem' && Math.abs(G.player.x - slotX(i)) < 170) { dmg *= 1.12 + .05 * b.lvl; rate *= 1.1 + .04 * b.lvl; }
+  }
+  return { dmg, rate };
+}
 
 export function step(dt) {
   if (!G) return;
@@ -204,36 +239,41 @@ export function step(dt) {
   G.hp = Math.min(G.maxHp, G.hp + D.regen * dt);
   if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) beginWave(G.wave + 1); }
   else if (G.phase === 'wave') { G.waveT += dt; while (G.spawnQ.length && G.spawnQ[0].at <= G.waveT && G.enemies.length < 42) spawnEnemy(G.spawnQ.shift()); }
-  updPlayer(dt); updTowers(dt); updEnemies(dt); updShots(dt); updFx(dt);
+  updPlayer(dt); updBuildings(dt); updEnemies(dt); updShots(dt); updFx(dt);
   if (G.phase === 'wave' && !G.spawnQ.length && !G.enemies.length) onClear();
 }
 function updPlayer(dt) {
-  const p = G.player;
+  const p = G.player, aura = auraMult();
   let mv = 0;
   if (keys.has('KeyA') || keys.has('ArrowLeft')) mv -= 1;
   if (keys.has('KeyD') || keys.has('ArrowRight')) mv += 1;
-  const zone = Math.min(140, view.W * .18);
+  const zone = Math.min(120, view.W * .13);
   if (pointer.dragX !== null) {
     const target = clamp(pointer.dragX, view.cx - zone, view.cx + zone), d = target - p.x;
     if (Math.abs(d) > 4) { mv = Math.sign(d); p.x += clamp(d, -D.move * dt, D.move * dt); }
   } else if (mv) { p.x += mv * D.move * dt; p.face = mv; }
+  p.moving = !!mv;
   p.x = clamp(p.x, view.cx - zone, view.cx + zone);
   p.ph += Math.abs(mv) * dt * 9;
-  if (p.swing >= 0) { p.swing += dt / (D.kind === 'slam' ? .3 : D.kind === 'spin' ? .34 : .2); if (p.swing > 1) p.swing = -1; }
-  p.atkCd -= dt * (G.rage > 0 ? 1.6 : 1);
+  if (p.swing >= 0) { p.swing += dt / D.swingDur; if (p.swing > 1) p.swing = -1; }
+  p.atkCd -= dt * (G.rage > 0 ? 1.6 : 1) * aura.rate;
   if (p.atkCd <= 0) {
     let best = null, bd = 1e9;
-    for (const e of G.enemies) { const d = Math.abs(e.x - p.x); if (d < D.range + e.s * .4 && d < bd) { bd = d; best = e; } }
+    for (const e of G.enemies) {
+      if (e.high) continue;
+      const d = Math.abs(e.x - p.x);
+      if (d < D.range + e.s * .4 && d < bd) { bd = d; best = e; }
+    }
     if (best) {
-      p.atkCd = 1 / D.rate; p.swing = 0; p.swingKind = D.kind; p.face = Math.sign(best.x - p.x) || p.face;
-      G.slashes.push({ x: p.x, y: view.ground - 60, t: 0, kind: D.kind, face: p.face, tier: D.wLvl, range: D.range });
+      p.atkCd = 1 / (D.rate * aura.rate); p.swing = 0; p.swingKind = D.kind; p.face = Math.sign(best.x - p.x) || p.face;
+      G.slashes.push({ x: p.x, y: view.ground - 60, t: 0, kind: D.kind, face: p.face, tier: D.wLvl, range: D.range, str: S.stats.str });
       play(weaponSound(D.kind));
-      const dmg = D.dmg * (G.rage > 0 ? 1.4 : 1);
+      const dmg = D.dmg * aura.dmg * (G.rage > 0 ? 1.4 : 1);
       const hit = e => meleeDamage(e, dmg, { canCrit: true, melee: true });
-      if (D.kind === 'spin') { for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range) { hit(e); kb(e, 30); } }
+      if (D.kind === 'spin') { for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range) { hit(e); kb(e, D.kb); } }
       else if (D.kind === 'slam') {
         const ix = p.x + p.face * D.range * .6;
-        for (const e of G.enemies) if (Math.abs(e.x - p.x) < D.range && (Math.sign(e.x - p.x) === p.face || Math.abs(e.x - p.x) < 40)) { hit(e); kb(e, D.kb); }
+        for (const e of G.enemies) if (!e.high && Math.abs(e.x - p.x) < D.range && (Math.sign(e.x - p.x) === p.face || Math.abs(e.x - p.x) < 40)) { hit(e); kb(e, D.kb); }
         G.rings.push({ x: ix, y: view.ground - 6, t: 0, life: .3, r1: D.shock });
         G.craters.push({ x: ix, t: 0, r: 14 });
         for (const e of G.enemies) if (Math.abs(e.x - ix) < D.shock && !e.dead) applyDamage(e, dmg * .5, { force: true });
@@ -241,6 +281,7 @@ function updPlayer(dt) {
       } else {
         let hits = 0; const maxHits = D.kind === 'jab' ? 1 : 3;
         for (const e of G.enemies) {
+          if (e.high) continue;
           const dx = e.x - p.x;
           if (Math.abs(dx) < D.range + e.s * .4 && (Math.sign(dx) === p.face || Math.abs(dx) < 40) && hits < maxHits) {
             hit(e); kb(e, D.kb); hits++;
@@ -258,33 +299,92 @@ function kb(e, force) {
   e.x += dir * force * (ENEMIES[e.type].boss ? .2 : 1);
   if (force > 30) e.stun = Math.max(e.stun, .22);
 }
-function updTowers(dt) {
-  for (let i = 0; i < 2; i++) {
-    const t = G.towers[i]; if (!t) continue;
-    t.flash = Math.max(0, t.flash - dt); t.recoil = Math.max(0, t.recoil - dt * 4);
-    for (let k = 0; k < t.trace.length; k++) t.trace[k] *= Math.pow(.05, dt);
-    t.cd -= dt;
-    const tx = towerX(i), def = TOWERS[t.type];
+function updBuildings(dt) {
+  for (let i = 0; i < SLOTS; i++) {
+    const b = G.buildings[i]; if (!b) continue;
+    b.flash = Math.max(0, b.flash - dt); b.recoil = Math.max(0, b.recoil - dt * 4);
+    for (let k = 0; k < b.trace.length; k++) b.trace[k] *= Math.pow(.05, dt);
+    const tx = slotX(i), def = BUILDINGS[b.type];
+    if (b.type === 'wall') continue;
+    if (b.type === 'gen') {
+      b.timer += dt;
+      if (b.timer >= 5) {
+        b.timer = 0; b.flash = .2;
+        const val = Math.round((4 + b.lvl * 2 + Math.floor(G.wave * .4)) * D.supportM * D.goldM);
+        G.pickups.push({ kind: 'gold', x: tx, y: view.ground - 50, vx: rnd(-40, 40), vy: -160, val, t: 0, ph: 0 });
+        play('coin');
+      }
+      continue;
+    }
+    if (b.type === 'fix') {
+      b.timer += dt;
+      if (b.timer >= 4 && G.hp < G.maxHp) {
+        b.timer = 0; b.flash = .25;
+        const heal = Math.round((8 + b.lvl * 4) * D.supportM);
+        G.hp = Math.min(G.maxHp, G.hp + heal);
+        G.rings.push({ x: G.player.x, y: view.ground - 60, t: 0, life: .4, r1: 60, green: true });
+        addText(G.player.x, view.ground - 150, '+' + heal, '#46f28e', 13);
+        play('heal');
+      }
+      continue;
+    }
+    if (b.type === 'totem') { b.timer += dt; continue; }
+    b.cd -= dt;
+    if (b.type === 'spikes') {
+      if (b.cd <= 0) {
+        const hitAny = G.enemies.some(e => !e.high && Math.abs(e.x - tx) < def.range);
+        if (hitAny) {
+          b.cd = 1 / bRate(b); b.flash = .1;
+          for (const e of G.enemies) if (!e.high && Math.abs(e.x - tx) < def.range) applyDamage(e, bDmg(b), {});
+          play('hit');
+        }
+      }
+      continue;
+    }
     let target = null, bd = 1e9;
     for (const e of G.enemies) { if (Math.abs(e.x - tx) > def.range) continue; const th = Math.abs(e.x - G.player.x); if (th < bd) { bd = th; target = e; } }
-    if (target) { const want = Math.atan2((view.ground + target.gyOff - target.s * 1.5) - (view.ground - 70), target.x - tx); t.aim += (want - t.aim) * Math.min(1, dt * 10); }
-    if (t.cd > 0 || G.phase !== 'wave' || !target) continue;
-    t.cd = 1 / towerRate(t); t.flash = .08; t.recoil = 1;
-    t.trace[t.ti % t.trace.length] = 1; t.ti++;
-    const dmg = towerDmg(t);
-    if (t.type === 'mg') { G.shots.push({ kind: 'mg', x: tx, y: view.ground - 70, tgt: target, lx: target.x, ly: view.ground + target.gyOff - target.s * 1.5, dmg, spd: 660 }); play('mg'); }
-    else if (t.type === 'rail') {
+    if (target) { const want = Math.atan2((view.ground + target.gyOff - target.s * 1.5) - (view.ground - 70), target.x - tx); b.aim += (want - b.aim) * Math.min(1, dt * 10); }
+    if (b.cd > 0 || G.phase !== 'wave' || !target) continue;
+    b.cd = 1 / bRate(b); b.flash = .08; b.recoil = 1;
+    b.trace[b.ti % b.trace.length] = 1; b.ti++;
+    const dmg = bDmg(b);
+    if (b.type === 'mg') { G.shots.push({ kind: 'mg', x: tx, y: view.ground - 70, tgt: target, lx: target.x, ly: view.ground + target.gyOff - target.s * 1.5, dmg, spd: 660 }); play('mg'); }
+    else if (b.type === 'rail') {
       const dir = Math.sign(target.x - tx) || 1, x1 = target.x + dir * 50, lo = Math.min(tx, x1), hi = Math.max(tx, x1);
       G.beams.push({ x0: tx, x1, y: view.ground - 34, t: 0, life: .14 });
       for (const e of G.enemies) if (e.x >= lo - 10 && e.x <= hi + 10) applyDamage(e, dmg, {});
       shake(2); play('rail');
-    } else {
+    } else if (b.type === 'mortar') {
       const dir = Math.sign(G.player.x - target.x) || 1;
       const lead = clamp(target.x + dir * target.spd * .7, 20, view.W - 20);
       G.shots.push({ kind: 'mt', x0: tx, y0: view.ground - 70, tx: lead, t: 0, T: .75, dmg, r: 80 });
       play('mortar');
+    } else if (b.type === 'tesla') {
+      const chains = 2 + Math.floor(b.lvl / 2);
+      const pts = [{ x: tx, y: view.ground - 78 }];
+      let cur = target, d = dmg;
+      const hitSet = new Set();
+      for (let c = 0; c < chains && cur; c++) {
+        hitSet.add(cur);
+        pts.push({ x: cur.x, y: view.ground + cur.gyOff - cur.s * 1.6 });
+        applyDamage(cur, d, {});
+        d *= .8;
+        let nxt = null, nd = 1e9;
+        for (const e of G.enemies) { if (hitSet.has(e) || e.dead) continue; const dd = Math.abs(e.x - cur.x); if (dd < 130 && dd < nd) { nd = dd; nxt = e; } }
+        cur = nxt;
+      }
+      G.zaps.push({ pts, t: 0, life: .16 });
+      play('zap'); shake(1.5);
     }
   }
+}
+function blockingWall(e) {
+  for (let i = 0; i < SLOTS; i++) {
+    const b = G.buildings[i]; if (!b || b.type !== 'wall') continue;
+    const x = slotX(i);
+    if (((e.x < x && x < G.player.x) || (e.x > x && x > G.player.x)) && Math.abs(e.x - x) < 240) return { b, x, i };
+  }
+  return null;
 }
 function updEnemies(dt) {
   const px = G.player.x;
@@ -292,9 +392,14 @@ function updEnemies(dt) {
     if (e.dead) continue;
     e.flash = Math.max(0, e.flash - dt);
     if (e.stun > 0) { e.stun -= dt; continue; }
-    const t = ENEMIES[e.type], dx = px - e.x, dist = Math.abs(dx), dir = Math.sign(dx) || 1;
-    e.face = dir;
-    if (t.bomb && dist < e.stop + 14) {
+    const t = ENEMIES[e.type];
+    if (t.fly) { e.high = Math.abs(px - e.x) > 150; e.gyOff += ((e.high ? -70 : -6) - e.gyOff) * Math.min(1, dt * 3); }
+    const rageMul = t.rage ? 1 + (1 - e.hp / e.maxHp) * 1.1 : 1;
+    const wall = blockingWall(e);
+    const tx = wall ? wall.x : px;
+    const dx = tx - e.x, dist = Math.abs(dx), dir = Math.sign(dx) || 1;
+    e.face = Math.sign(px - e.x) || e.face;
+    if (t.bomb && !wall && dist < e.stop + 14) {
       e.fuse += dt;
       if (e.fuse > .5) {
         e.dead = true; play('boom'); shake(7);
@@ -304,7 +409,25 @@ function updEnemies(dt) {
         continue;
       }
     }
-    if (t.ranged && dist < 260 && dist > e.stop) {
+    if (t.summon && dist < 340 && !wall) {
+      e.sumCd -= dt;
+      if (e.sumCd <= 0 && G.enemies.length < 40) {
+        e.sumCd = t.boss ? 6 : 7;
+        makeEnemy(t.boss ? 'ghost' : 'walk', e.x + rnd(-24, 24), t.boss ? .8 : .6);
+        G.rings.push({ x: e.x, y: view.ground - 30, t: 0, life: .4, r1: 50, green: true });
+        play('summon');
+      }
+    }
+    if (t.brood && !wall) {
+      e.sumCd -= dt;
+      if (e.sumCd <= 0 && G.enemies.length < 40) { e.sumCd = 5; makeEnemy('run', e.x - 20, .5); makeEnemy('run', e.x + 20, .5); play('summon'); }
+    }
+    if (t.charge && !wall) {
+      e.chargeCd -= dt;
+      if (e.chargeCd <= 0 && dist > 120) { e.charge = 1.1; e.chargeCd = 7; play('rage'); }
+      if (e.charge > 0) e.charge -= dt;
+    }
+    if (t.ranged && !wall && dist < 260 && dist > e.stop) {
       e.wind += dt;
       if (e.wind > 2.4) {
         e.wind = 0;
@@ -314,16 +437,31 @@ function updEnemies(dt) {
       }
       continue;
     }
-    if (dist > e.stop) {
-      e.x += dir * e.spd * dt; e.ph += e.spd * dt * .09;
-      if (t.boss || t.gait === 'stomp') { const sn = Math.floor(e.ph / Math.PI); if (sn !== e.lastStep) { e.lastStep = sn; shake(t.boss ? 1.6 : .5); if (t.boss) play('step'); } }
+    const stop = wall ? 46 : e.stop;
+    if (dist > stop) {
+      const spd = e.spd * rageMul * (e.charge > 0 ? 4 : 1);
+      e.x += dir * spd * dt; e.ph += spd * dt * .09;
+      if (t.boss || t.gait === 'stomp') {
+        const sn = Math.floor(e.ph / Math.PI);
+        if (sn !== e.lastStep) {
+          e.lastStep = sn; shake(t.titan ? 3 : t.boss ? 1.6 : .5);
+          if (t.boss) play('step');
+          if (t.titan) { G.rings.push({ x: e.x, y: view.ground - 4, t: 0, life: .4, r1: 130, red: true }); if (Math.abs(px - e.x) < 130) hurtPlayer(e.dmg * .45); }
+        }
+      }
     } else {
       e.atkCd -= dt;
       if (e.atkCd <= 0) {
         e.atkCd = t.boss ? 1.4 : 1;
-        hurtPlayer(e.dmg);
-        if (t.boss) { G.rings.push({ x: px, y: view.ground - 30, t: 0, life: .3, r1: 70, red: true }); shake(6); }
-        burst(px, view.ground - 70, 3, '#f2f2ee', 100);
+        if (wall) {
+          wall.b.hp -= e.dmg * rageMul; wall.b.flash = .12;
+          burst(wall.x, view.ground - 40, 3, '#f2f2ee', 90);
+          if (wall.b.hp <= 0) { G.buildings[wall.i] = null; burst(wall.x, view.ground - 40, 14, '#f2f2ee', 180); emit('buildings'); emit('toast', 'Стена пала!', 'red'); play('boom'); }
+        } else {
+          hurtPlayer(e.dmg * rageMul * (e.charge > 0 ? 1.5 : 1));
+          if (t.boss) { G.rings.push({ x: px, y: view.ground - 30, t: 0, life: .3, r1: 70, red: true }); shake(6); }
+          burst(px, view.ground - 70, 3, '#f2f2ee', 100);
+        }
       }
     }
   }
@@ -357,6 +495,8 @@ function updShots(dt) {
   G.eShots = G.eShots.filter(s => !s.done);
   for (const b of G.beams) b.t += dt;
   G.beams = G.beams.filter(b => b.t < b.life);
+  for (const z of G.zaps) z.t += dt;
+  G.zaps = G.zaps.filter(z => z.t < z.life);
 }
 function updFx(dt) {
   for (const p of G.parts) { p.t += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; }
@@ -397,7 +537,16 @@ on('level', lvl => {
   emit('banner', 'УРОВЕНЬ ' + lvl, '+3 ОЧКА · C — РАСПРЕДЕЛИТЬ', 'green');
   G.rings.push({ x: G.player.x, y: view.ground - 60, t: 0, life: .4, r1: 120, green: true });
 });
-on('stats', ({ hpDelta }) => { if (!G || view.screen !== 'battle') return; G.maxHp = D.maxHp; G.hp = Math.min(G.maxHp, G.hp + Math.max(0, hpDelta)); });
+on('stats', ({ hpDelta, k, n }) => {
+  if (!G || view.screen !== 'battle') return;
+  G.maxHp = D.maxHp; G.hp = Math.min(G.maxHp, G.hp + Math.max(0, hpDelta));
+  if (k) {
+    const label = { str: 'СИЛА', agi: 'ЛОВКОСТЬ', vit: 'СТОЙКОСТЬ', pre: 'ТОЧНОСТЬ', eng: 'ИНЖЕНЕРИЯ', lck: 'УДАЧА' }[k];
+    addText(G.player.x, view.ground - 170, `${label} +${n}`, '#46f28e', 14);
+    G.rings.push({ x: G.player.x, y: view.ground - 60, t: 0, life: .35, r1: 90, green: true });
+    G.player.swing = 0; G.player.swingKind = D.kind;
+  }
+});
 on('weapon', () => { if (G) G.player.swing = -1; });
 on('key', k => {
   if (view.screen !== 'battle' || !G || G.paused || G.panelPause || G.over) return;
