@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=3">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 <div id="grain"></div><div id="vig"></div><div id="lowhp"></div>
@@ -48,6 +48,11 @@
       <div id="bossWrap" class="hidden"><span id="bossName">КОЛОСС</span>
         <div class="bar sk boss"><i id="bossFill"></i></div></div>
       <button id="btnNext" class="ibtn small hidden">ВОЛНА 1 ▶</button>
+      <div id="skipRow" class="hidden">
+        <button id="skip5" class="ibtn small ghost">ПРОПУСТИТЬ 5 · ¤0</button>
+        <button id="skip10" class="ibtn small ghost">10 · ¤0</button>
+        <span class="skip-hint">пропуск без наград · рекорд считается по зачищенным волнам</span>
+      </div>
     </div>
     <div class="b-bar right">
       <label>УРОВЕНЬ <b id="lvlNum">1</b> <button id="ptsBtn" class="pts hidden">+0</button></label>
@@ -61,18 +66,22 @@
     </div>
   </div>
   <div id="banner" class="hidden"><b id="bannerT"></b><span id="bannerS"></span></div>
-  <div class="b-bottom">
+
+  <div id="dock" class="b-bottom">
     <div class="b-posts">
-      <button id="post0" class="post sk empty"><b>ПОСТ 1 +</b>построить башню</button>
-      <button id="post1" class="post sk empty"><b>ПОСТ 2 +</b>построить башню</button>
+      <button id="post0" class="post empty"><i>1</i><span><b>ПОСТ 1</b><em>построить</em></span></button>
+      <button id="post1" class="post empty"><i>2</i><span><b>ПОСТ 2</b><em>построить</em></span></button>
+      <button id="post2" class="post empty"><i>3</i><span><b>ПОСТ 3</b><em>построить</em></span></button>
+      <button id="post3" class="post empty"><i>4</i><span><b>ПОСТ 4</b><em>построить</em></span></button>
     </div>
-    <div class="b-weapon"><b id="wName">КУЛАКИ</b><span>клик / SPACE — вихрь · E — ярость</span></div>
+    <div class="b-weapon"><b id="wName">КУЛАКИ</b><span id="wStats"></span><span class="hint">SPACE — вихрь · E — ярость</span></div>
     <div class="b-nums"><span class="gold">¤ <b id="goldVal">0</b></span><span class="dim">✕ <b id="killVal">0</b></span></div>
     <div class="b-abs">
       <button id="ab1" class="ab sk"><b>ВИХРЬ</b><kbd>SPC</kbd><i id="ab1cd"></i><em id="ab1s"></em></button>
       <button id="ab2" class="ab sk"><b>ЯРОСТЬ</b><kbd>E</kbd><i id="ab2cd"></i><em id="ab2s"></em></button>
     </div>
   </div>
+
   <div id="pauseVeil" class="hidden">
     <div class="pv sk">
       <h2>ПАУЗА</h2>
@@ -89,10 +98,23 @@
 </aside>
 <div id="pop" class="sk hidden"></div>
 
+<div id="resume" class="hidden">
+  <div class="res sk">
+    <div class="res-title">ВЕРНУТЬСЯ К ЧЕРТЕ?</div>
+    <p>Ты уже доходил до волны <b id="resBest">10</b>.<br>Можно начать сразу оттуда — с текущими статами и оружием.</p>
+    <div class="res-actions">
+      <button id="resFresh" class="ibtn">С ВОЛНЫ 1</button>
+      <button id="resJump" class="ibtn fill">К ВОЛНЕ 10 ▶</button>
+    </div>
+    <label class="res-check"><input type="checkbox" id="resAsk"> больше не спрашивать</label>
+  </div>
+</div>
+
 <div id="summary" class="hidden">
   <div class="sum sk">
     <div id="sumTitle" class="sum-title">ЧЕРТА ПРОРВАНА</div>
     <div class="sum-wave"><span>ДОШЁЛ ДО ВОЛНЫ</span><b id="sumWave">1</b><em id="sumRecord" class="hidden">НОВЫЙ РЕКОРД</em></div>
+    <div id="sumMeta" class="sum-meta"></div>
     <div class="sum-grid">
       <div><label>УБИЙСТВ</label><b id="sumKills"></b></div>
       <div><label>ВРЕМЯ</label><b id="sumTime"></b></div>
@@ -115,19 +137,18 @@
 <div id="toasts"></div>
 <noscript><div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#f2f2ee;font-family:monospace">Для игры нужен JavaScript.</div></noscript>
 <script>
-/* видимая диагностика вместо чёрного экрана, если модуль не загрузился */
 window.__bootFail = function (msg) {
   var b = document.getElementById('boot');
   b.classList.remove('hidden');
-  b.textContent = '⚠ ' + msg + ' — обнови страницу с Ctrl+F5 и проверь, что папки js/ и css/ закоммичены в репозиторий.';
+  b.textContent = '⚠ ' + msg;
 };
 window.addEventListener('error', function (e) {
-  if (e.target && e.target.tagName === 'SCRIPT') window.__bootFail('не загружен ' + (e.target.src || 'модуль'));
+  if (e.target && e.target.tagName === 'SCRIPT') window.__bootFail('не загружен ' + (e.target.src || 'модуль') + ' — проверь, что папки js/ и css/ закоммичены, и обнови с Ctrl+F5.');
   else if (e.message) window.__bootFail(e.message);
 }, true);
 window.addEventListener('unhandledrejection', function (e) { window.__bootFail(String(e.reason && e.reason.message || e.reason)); });
-setTimeout(function () { if (!window.__booted) window.__bootFail('игра не запустилась (проверь консоль: F12)'); }, 4000);
+setTimeout(function () { if (!window.__booted) window.__bootFail('игра не запустилась — открой консоль (F12) и проверь 404 по js/.'); }, 5000);
 </script>
-<script type="module" src="js/main.js?v=3" onerror="__bootFail('не загружен js/main.js')"></script>
+<script type="module" src="js/main.js?v=5" onerror="__bootFail('не загружен js/main.js')"></script>
 </body>
 </html>
