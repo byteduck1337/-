@@ -1,5 +1,5 @@
 import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon } from './state.js';
-import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost } from './config.js';
+import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost, NICK_COOLDOWN } from './config.js';
 import { on, emit } from './events.js';
 import { view } from './view.js';
 import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves } from './game.js';
@@ -11,15 +11,17 @@ const $ = id => document.getElementById(id);
 const SND_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
 const SND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
 let sheetName = null, boardTab = 'world', popSlot = -1, menuIdx = 0, lastSummary = null;
-let skipArm = { 5: false, 10: false }, skipTimers = { 5: null, 10: null };
+let skipArm = { 5: false, 10: false }, skipTimers = { 5: null, 10: null }, nickTimer = null;
 const MENU = [
   { id: 'fight', t: 'В БОЙ', s: () => `волна 1 · рекорд ${S.best}` },
   { id: 'arsenal', t: 'АРСЕНАЛ', s: () => `${WEAPONS[S.weapon].name}${D.wLvl ? ' ур.' + D.wLvl : ''} · оружие и постройки` },
   { id: 'stats', t: 'ПРОКАЧКА', s: () => S.pts ? `+${S.pts} очка ждут` : `уровень ${S.level} · лимит ${D.cap}` },
-  { id: 'records', t: 'РЕКОРДЫ', s: () => net.apiBase() ? 'мировая таблица · воркер' : 'локально · воркер не подключён' },
-  { id: 'settings', t: 'НАСТРОЙКИ', s: () => 'звук · скорость · зерно · api' },
+  { id: 'records', t: 'РЕКОРДЫ', s: () => net.status === 'ok' ? 'мировая таблица · онлайн' : 'локально · нет связи' },
+  { id: 'settings', t: 'НАСТРОЙКИ', s: () => 'звук · скорость · зерно' },
 ];
 const derivedText = () => `УРОН <b>${Math.round(D.dmg)}</b> · ТЕМП <b>${D.rate.toFixed(2)}/с</b> · HP <b>${D.maxHp}</b> · КРИТ <b>${Math.round(D.crit * 100)}%</b> · УКЛОН <b>${Math.round(D.dodge * 100)}%</b>`;
+const connText = () => ({ ok: 'ПОДКЛЮЧЁН', load: 'СВЯЗЬ…', err: 'НЕТ СВЯЗИ', off: 'НЕ НАСТРОЕН' }[net.status] || '—');
+const connColor = () => ({ ok: 'var(--acc)', load: 'var(--gold)', err: 'var(--red)', off: 'var(--dim)' }[net.status] || 'var(--dim)');
 
 export function init() {
   buildMenu();
@@ -72,6 +74,8 @@ export function init() {
   on('stats', () => { refreshMenuMeta(); refreshWeaponHud(); if (sheetName === 'stats') renderSheet(); if (view.screen === 'menu') emit('menu:swing'); });
   on('weapon', () => { refreshMenuMeta(); refreshWeaponHud(); if (sheetName === 'arsenal') renderSheet(); });
   on('buildings', renderPosts);
+  on('nick', refreshMenuMeta);
+  on('net', () => { refreshMenuMeta(); if (sheetName === 'records' || sheetName === 'settings') renderSheet(); });
   on('run:start', () => { $('pauseVeil').classList.add('hidden'); $('btnPause').textContent = '⏸'; $('lowhp').classList.remove('on'); renderPosts(); refreshWeaponHud(); refreshGold(); refreshXp(); renderSkip(); $('killVal').textContent = '0'; $('bossWrap').classList.add('hidden'); });
   on('run:end', showSummary);
   on('wave:inter', () => renderSkip());
@@ -86,7 +90,6 @@ export function init() {
 }
 function toggleSound() { audioInit(); setMuted(S.sound); syncSound(); saveSoon(); if (sheetName === 'settings') renderSheet(); }
 
-/* ---- запуск забега с предложением возврата ---- */
 function requestRun() {
   if (S.best >= 2 && S.askResume) {
     $('resBest').textContent = S.best;
@@ -103,7 +106,6 @@ function beginRun(w) {
   emit('layout');
 }
 
-/* ---- пропуск волн ---- */
 function onSkip(n) {
   if (!G || G.phase !== 'inter') return;
   const cost = skipCost(S.gold, n);
@@ -146,7 +148,7 @@ function refreshMenuMeta() {
   $('mGold').textContent = '¤ ' + fmtN(S.gold);
   $('mLvl').textContent = 'УР. ' + S.level;
   const st = S.stats;
-  $('mStats').innerHTML = `<b>${WEAPONS[S.weapon].name}</b>${D.wLvl ? ' ур.' + D.wLvl : ''} · СИЛ ${st.str} · ЛОВ ${st.agi} · СТК ${st.vit} · ТЧН ${st.pre} · ИНЖ ${st.eng} · УДЧ ${st.lck}` +
+  $('mStats').innerHTML = `<b>${esc(S.nick)}</b> · ${WEAPONS[S.weapon].name}${D.wLvl ? ' ур.' + D.wLvl : ''} · СИЛ ${st.str} · ЛОВ ${st.agi} · СТК ${st.vit} · ТЧН ${st.pre} · ИНЖ ${st.eng} · УДЧ ${st.lck}` +
     (S.pts ? `<br><span class="pts">+${S.pts} ОЧКА НЕ РАСПРЕДЕЛЕНЫ — ПРОКАЧКА</span>` : '') +
     `<br><span class="derived">${derivedText()}</span>` +
     `<br>забегов ${S.runs} · убийств ${fmtN(S.kills)} · лучшая волна <b>${S.best}</b>`;
@@ -177,14 +179,16 @@ function syncSound() {
 function setSpeed(v, silent) { S.speed = v; $('btnSpeed').textContent = v + '×'; if (!silent) { play('click'); saveSoon(); } if (sheetName === 'settings') renderSheet(); }
 
 export function openSheet(name) { sheetName = name; play('click'); $('sheet').classList.remove('hidden'); renderSheet(); if (view.screen === 'battle' && G && !G.over) panelPause(true); }
-export function closeSheet() { if (!sheetName) return; sheetName = null; $('sheet').classList.add('hidden'); if (view.screen === 'battle' && popSlot < 0) panelPause(false); }
+export function closeSheet() { if (!sheetName) return; sheetName = null; stopNickTicker(); $('sheet').classList.add('hidden'); if (view.screen === 'battle' && popSlot < 0) panelPause(false); }
 function renderSheet() {
+  stopNickTicker();
   const b = $('sheetBody');
   if (sheetName === 'arsenal') b.innerHTML = arsenalHTML();
   else if (sheetName === 'stats') b.innerHTML = statsHTML();
   else if (sheetName === 'records') b.innerHTML = recordsHTML();
   else if (sheetName === 'settings') b.innerHTML = settingsHTML();
   bindSheet();
+  if (sheetName === 'records') { updateNickUI(); startNickTicker(); }
 }
 function tierPips(lvl) { return `<span class="tier">${Array.from({ length: W_MAX }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>`; }
 function arsenalHTML() {
@@ -223,13 +227,17 @@ function statsHTML() {
   return h;
 }
 function recordsHTML() {
-  let h = `<h3>РЕКОРДЫ</h3><div class="sub">лучший забег на позывной. рекорд считается по зачищенным волнам.</div>
-    <div class="nickrow"><label>ПОЗЫВНОЙ</label><div class="apirow"><input id="nickInput" maxlength="16" value="${esc(S.nick)}" spellcheck="false"></div></div>
+  const left = net.cooldownLeft();
+  let h = `<h3>РЕКОРДЫ</h3><div class="sub">позывной уникален. смена — не чаще раза в 2 минуты.</div>
+    <div class="nickrow"><label>ПОЗЫВНОЙ</label>
+      <div class="apirow"><input id="nickInput" maxlength="16" value="${esc(S.nick)}" spellcheck="false" autocomplete="off"><button id="nickSave" class="ibtn small" ${left > 0 ? 'disabled' : ''}>СМЕНИТЬ</button></div>
+      <div id="nickStatus" class="hintline" style="margin-top:8px">${left > 0 ? `следующая смена через ${left}с` : 'смена позывного доступна раз в 2 минуты'}</div>
+    </div>
     <div class="tabs"><button class="tab ${boardTab === 'world' ? 'on' : ''}" data-tab="world">МИР</button><button class="tab ${boardTab === 'local' ? 'on' : ''}" data-tab="local">ЛОКАЛЬНО</button><button class="ibtn small" id="boardRefresh">↻</button></div>`;
   if (boardTab === 'local') h += S.board.length ? S.board.map(brow).join('') : `<div class="empty">пока пусто. первый забег ждёт.</div>`;
-  else if (!net.apiBase()) h += `<div class="empty">мировая таблица живёт на cloudflare worker.<br>задеплой worker.js и вставь адрес в настройках.<br><button class="ibtn small" id="goSettings" style="margin-top:10px">НАСТРОЙКИ</button></div>`;
-  else if (net.status === 'load') h += `<div class="empty">загрузка…</div>`;
-  else if (!net.world) h += `<div class="empty">сервер не ответил. проверь адрес и связь.</div>`;
+  else if (!net.isConfigured()) h += `<div class="empty">мировая таблица не настроена.<br>адрес сервера задаётся один раз в js/config.js → API_BASE.</div>`;
+  else if (net.status !== 'ok') h += `<div class="empty">нет связи с сервером.<br>проверь воркер и адрес в js/config.js.</div>`;
+  else if (!net.world) h += `<div class="empty">загрузка таблицы…</div>`;
   else {
     h += `<div class="hintline" style="margin:0 0 8px">${net.worldMeta?.total ?? net.world.length} бойцов · рекорд волна ${net.worldMeta?.top ?? 0}</div>`;
     h += net.world.length ? net.world.map(brow).join('') : `<div class="empty">таблица пуста. стань первым.</div>`;
@@ -248,8 +256,7 @@ function settingsHTML() {
     <div class="setrow"><span>ЗЕРНО</span><button class="sw ${S.grain ? 'on' : ''}" id="setGrain"></button></div>
     <div class="setrow"><span>ЧАСТИЦЫ</span><div class="seg">${['high', 'med', 'low'].map(q => `<button data-q="${q}" class="${S.quality === q ? 'on' : ''}">${{ high: 'ПОЛН', med: 'СРЕД', low: 'МИН' }[q]}</button>`).join('')}</div></div>
     <div class="setrow"><span>ПРЕДЛАГАТЬ ВОЗВРАТ<small>к лучшей волне при новом забеге</small></span><button class="sw ${S.askResume ? 'on' : ''}" id="setAsk"></button></div>
-    <div class="setrow" style="display:block"><span>CLOUDFLARE WORKER<small>адрес api лидборда · пусто = локально</small></span>
-      <div class="apirow"><input id="apiInput" value="${esc(S.api || '')}" placeholder="https://cherta-lb.имя.workers.dev" spellcheck="false"><button class="ibtn small" id="apiCheck">ПРОВЕРИТЬ</button></div><div id="apiStatus"></div></div>
+    <div class="setrow"><span>СЕРВЕР<small>общий лидборд · Cloudflare Worker</small></span><span style="font-size:10px;font-weight:700;letter-spacing:.14em;color:${connColor()}">${connText()}</span></div>
     <div class="setrow"><span class="red">СТЕРЕТЬ СОХРАНЕНИЕ<small>уровень, оружие, золото, рекорды</small></span><button class="ibtn small red" id="wipeBtn">СТЕРЕТЬ</button></div>`;
 }
 function bindSheet() {
@@ -261,26 +268,33 @@ function bindSheet() {
   const rs = b.querySelector('#respecBtn'); if (rs) rs.addEventListener('click', () => { if (respec()) { play('build'); toast('Статы сброшены. Очки возвращены.', 'gold'); } else play('err'); });
   b.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { boardTab = el.dataset.tab; play('click'); renderSheet(); if (boardTab === 'world') net.fetchWorld(); }));
   const rf = b.querySelector('#boardRefresh'); if (rf) rf.addEventListener('click', () => { play('click'); boardTab === 'world' ? net.fetchWorld() : renderSheet(); });
-  const gs = b.querySelector('#goSettings'); if (gs) gs.addEventListener('click', () => openSheet('settings'));
-  const ni = b.querySelector('#nickInput');
-  if (ni) ni.addEventListener('change', () => { const v = ni.value.trim().replace(/\s+/g, ' ').toUpperCase(); if (!NICK_RE.test(v)) { toast('Позывной: 3–16 символов.', 'red'); ni.value = S.nick; play('err'); return; } S.nick = v; ni.value = v; saveSoon(); play('click'); });
+  const ni = b.querySelector('#nickInput'), ns = b.querySelector('#nickSave');
+  if (ns) ns.addEventListener('click', async () => {
+    const st = b.querySelector('#nickStatus');
+    const v = ni.value.trim().replace(/\s+/g, ' ').toUpperCase();
+    if (!NICK_RE.test(v)) { st.textContent = '✗ позывной: 3–16 символов (буквы, цифры, _ -)'; st.style.color = 'var(--red)'; play('err'); return; }
+    ns.disabled = true; ns.textContent = '…'; st.textContent = 'проверяю…'; st.style.color = 'var(--dim)';
+    const r = await net.changeNick(v);
+    if (r.ok) { st.textContent = '✓ позывной обновлён'; st.style.color = 'var(--acc)'; ni.value = r.nick; refreshMenuMeta(); play('up'); }
+    else { st.textContent = '✗ ' + r.error; st.style.color = 'var(--red)'; play('err'); }
+    updateNickUI();
+  });
   const ss = b.querySelector('#setSound'); if (ss) ss.addEventListener('click', toggleSound);
   b.querySelectorAll('[data-speed]').forEach(el => el.addEventListener('click', () => setSpeed(+el.dataset.speed)));
   const sh = b.querySelector('#setShake'); if (sh) sh.addEventListener('click', () => { S.shake = !S.shake; saveSoon(); play('click'); renderSheet(); });
   const gr = b.querySelector('#setGrain'); if (gr) gr.addEventListener('click', () => { S.grain = !S.grain; $('grain').style.display = S.grain ? '' : 'none'; saveSoon(); play('click'); renderSheet(); });
   const sa = b.querySelector('#setAsk'); if (sa) sa.addEventListener('click', () => { S.askResume = !S.askResume; saveSoon(); play('click'); renderSheet(); });
   b.querySelectorAll('[data-q]').forEach(el => el.addEventListener('click', () => { S.quality = el.dataset.q; saveSoon(); emit('quality'); play('click'); renderSheet(); }));
-  const ac = b.querySelector('#apiCheck');
-  if (ac) ac.addEventListener('click', async () => {
-    const v = b.querySelector('#apiInput').value.trim().replace(/\/+$/, ''); S.api = v; saveSoon();
-    const st = b.querySelector('#apiStatus');
-    if (!v) { st.textContent = 'локальный режим'; st.className = ''; net.fetchWorld(); return; }
-    st.textContent = 'проверяю…'; st.className = '';
-    try { const d = await net.checkApi(v); st.textContent = `✓ связь · ${d.players} бойцов · рекорд ${d.top}`; st.className = 'ok'; play('up'); net.fetchWorld(); }
-    catch (e) { st.textContent = '✗ не удалось соединиться'; st.className = 'err'; play('err'); }
-  });
   const wp = b.querySelector('#wipeBtn');
-  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
+  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
+}
+function startNickTicker() { stopNickTicker(); nickTimer = setInterval(updateNickUI, 1000); }
+function stopNickTicker() { if (nickTimer) { clearInterval(nickTimer); nickTimer = null; } }
+function updateNickUI() {
+  const btn = $('nickSave'), st = $('nickStatus'); if (!btn) return;
+  const left = net.cooldownLeft();
+  if (left > 0) { btn.disabled = true; btn.textContent = `СМЕНИТЬ (${left}с)`; if (st && !st.textContent.startsWith('✗') && !st.textContent.startsWith('✓')) st.textContent = `следующая смена через ${left}с`; }
+  else { btn.disabled = false; btn.textContent = 'СМЕНИТЬ'; }
 }
 
 function openPop(i) {
@@ -361,21 +375,21 @@ function showSummary(d) {
   $('sumNick').value = S.nick;
   const st = $('submitStatus'), btn = $('btnSubmit');
   st.textContent = ''; st.className = ''; btn.disabled = false; btn.textContent = 'ОТПРАВИТЬ РЕКОРД';
-  if (!net.apiBase()) { btn.disabled = true; btn.textContent = 'ЛОКАЛЬНО ✓'; st.textContent = 'рекорд на устройстве · подключи воркер для мировой таблицы'; }
+  if (!net.isConfigured() || net.status !== 'ok') { btn.disabled = true; btn.textContent = 'ЛОКАЛЬНО ✓'; st.textContent = 'рекорд сохранён на устройстве · сервер недоступен'; }
   $('summary').classList.remove('hidden');
   refreshMenuMeta();
 }
 async function onSubmit() {
   if (!lastSummary || G?.submitted) return;
-  const nick = $('sumNick').value.trim().replace(/\s+/g, ' ').toUpperCase();
-  if (!NICK_RE.test(nick)) { $('submitStatus').textContent = 'позывной: 3–16 символов'; $('submitStatus').className = 'err'; play('err'); return; }
-  S.nick = nick; saveSoon();
   const btn = $('btnSubmit'), st = $('submitStatus');
   btn.disabled = true; btn.textContent = 'ОТПРАВКА…';
   try {
-    const r = await net.submit({ nick, wave: Math.max(1, lastSummary.cleared), kills: lastSummary.kills, level: lastSummary.level, time: lastSummary.time, runId: lastSummary.runId });
-    if (r.ok && r.data?.ok) { G.submitted = true; btn.textContent = 'ПРИНЯТО ✓'; st.textContent = r.data.kept ? 'сервер оставил твой лучший результат' : '✓ рекорд в мировой таблице'; st.className = 'ok'; play('up'); setTimeout(net.fetchWorld, 600); }
-    else { btn.disabled = false; btn.textContent = 'ПОВТОРИТЬ'; st.textContent = '✗ ' + (r.data?.error || 'ошибка ' + r.status); st.className = 'err'; play('err'); }
+    const r = await net.submitRun({ wave: Math.max(1, lastSummary.cleared), kills: lastSummary.kills, level: lastSummary.level, time: lastSummary.time, runId: lastSummary.runId });
+    if (r.ok && r.data?.ok) {
+      G.submitted = true; btn.textContent = 'ПРИНЯТО ✓';
+      st.textContent = r.data.kept ? 'сервер оставил твой лучший результат' : '✓ рекорд в мировой таблице';
+      st.className = 'ok'; play('up'); setTimeout(net.fetchWorld, 600);
+    } else { btn.disabled = false; btn.textContent = 'ПОВТОРИТЬ'; st.textContent = '✗ ' + (r.data?.error || 'ошибка ' + r.status); st.className = 'err'; play('err'); }
   } catch (e) { btn.disabled = false; btn.textContent = 'ПОВТОРИТЬ'; st.textContent = '✗ воркер недоступен — сохранено локально'; st.className = 'err'; play('err'); }
 }
 
@@ -402,4 +416,4 @@ export function hudFrame(g) {
   $('ab2s').textContent = locked ? 'ур.4' : g.rage > 0 ? g.rage.toFixed(1) : g.ab2 > 0 ? Math.ceil(g.ab2) : '';
   $('ab2').classList.toggle('ready', !locked && g.ab2 <= 0);
   $('killVal').textContent = fmtN(g.kills);
-}  
+}
