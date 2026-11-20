@@ -1,25 +1,27 @@
-import { BAL, STATS, WEAPONS, W_MAX, wUpCost, DEFAULT_API } from './config.js';
+import { BAL, STATS, WEAPONS, W_MAX, wUpCost } from './config.js';
 import { emit } from './events.js';
 import { uuid } from './utils.js';
 
-const KEY = 'cherta_save_v5';
+const KEY = 'cherta_save_v6';
 const DEF = () => ({
-  v: 5, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
+  v: 6, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
   stats: { str: 0, agi: 0, vit: 0, pre: 0, eng: 0, lck: 0 },
   gold: BAL.startGold, best: 0, runs: 0, kills: 0, askResume: true,
   sound: true, speed: 1, shake: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-  grain: true, quality: 'high', api: DEFAULT_API, board: [], seenHint: false,
+  grain: true, quality: 'high', board: [], seenHint: false,
   weapon: 'fists', weapons: { fists: { own: true, lvl: 0 } },
+  playerId: '', playerToken: '', nickChangedAt: 0,
 });
 export let S = DEF();
 try {
-  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v4') || localStorage.getItem('cherta_save_v3') || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
+  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v5') || localStorage.getItem('cherta_save_v4') || localStorage.getItem('cherta_save_v3') || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
   if (raw) {
     const p = JSON.parse(raw);
     S = Object.assign(DEF(), p);
     S.stats = Object.assign(DEF().stats, p.stats || {});
     S.weapons = Object.assign({ fists: { own: true, lvl: 0 } }, p.weapons || {});
     if (!Array.isArray(S.board)) S.board = [];
+    delete S.api;
   }
 } catch (e) { console.warn('save reset', e); }
 if (!WEAPONS[S.weapon] || !S.weapons[S.weapon]?.own) S.weapon = 'fists';
@@ -30,6 +32,9 @@ let saveTimer = null;
 export function saveNow() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 export function saveSoon() { if (!saveTimer) saveTimer = setTimeout(() => { saveTimer = null; saveNow(); }, 700); }
 addEventListener('beforeunload', saveNow);
+
+export function setIdentity(id, token) { S.playerId = id; S.playerToken = token; saveNow(); }
+export function setNick(nick) { S.nick = nick; saveSoon(); emit('nick'); }
 
 export let D = {};
 export function calc() {
