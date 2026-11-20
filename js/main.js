@@ -1,20 +1,25 @@
 import { computeView, view } from './view.js';
 import { S, D } from './state.js';
-import { on, emit } from './events.js';
+import { on } from './events.js';
 import { init as inputInit } from './input.js';
 import { play, weaponSound } from './audio.js';
 import * as game from './game.js';
 import { drawBattle, drawMenu, practice } from './render.js';
 import * as ui from './ui.js';
-import { setBoil } from './utils.js';
+import { setBoil, clamp } from './utils.js';
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
+const dock = document.getElementById('dock');
 let failed = false;
 
 function resize() {
-  const oldCx = view.cx;
+  const oldCx = view.cx, oldGround = view.ground;
   computeView();
+  /* земля всегда выше дока: оверлеи не пересекаются с игровым полем */
+  const dh = dock && view.screen === 'battle' ? dock.getBoundingClientRect().height : 0;
+  view.dockH = dh;
+  view.ground = Math.max(170, view.H - dh - 30);
   canvas.width = Math.max(1, Math.floor(view.W * view.DPR));
   canvas.height = Math.max(1, Math.floor(view.H * view.DPR));
   ctx.setTransform(view.DPR, 0, 0, view.DPR, 0, 0);
@@ -23,18 +28,19 @@ function resize() {
     const d = view.cx - oldCx;
     G.player.x += d;
     G.enemies.forEach(e => e.x += d);
-    G.shots = []; G.eShots = []; G.beams = []; G.parts = []; G.texts = []; G.craters = [];
+    if (oldGround !== view.ground) { G.shots = []; G.eShots = []; G.beams = []; G.zaps = []; G.parts = []; G.texts = []; G.craters = []; }
   }
 }
 addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(dock);
+on('layout', () => requestAnimationFrame(resize));
 
 function setScreen(name) {
   view.screen = name;
   document.getElementById('menu').classList.toggle('hidden', name !== 'menu');
   document.getElementById('battle').classList.toggle('hidden', name !== 'battle');
   document.getElementById('lowhp').classList.remove('on');
-  if (name === 'battle' && (!game.G || game.G.over)) game.startRun();
-  emit('screen', name);
+  requestAnimationFrame(resize);
 }
 on('screen', setScreen);
 on('menu:swing', () => { practice(); play(weaponSound(D.kind)); });
