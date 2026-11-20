@@ -2,18 +2,18 @@ import { BAL, STATS, WEAPONS, W_MAX, wUpCost, DEFAULT_API } from './config.js';
 import { emit } from './events.js';
 import { uuid } from './utils.js';
 
-const KEY = 'cherta_save_v3';
+const KEY = 'cherta_save_v5';
 const DEF = () => ({
-  v: 3, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
+  v: 5, nick: 'СТРАННИК', level: 1, xp: 0, pts: 0,
   stats: { str: 0, agi: 0, vit: 0, pre: 0, eng: 0, lck: 0 },
-  gold: BAL.startGold, best: 0, runs: 0, kills: 0,
+  gold: BAL.startGold, best: 0, runs: 0, kills: 0, askResume: true,
   sound: true, speed: 1, shake: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   grain: true, quality: 'high', api: DEFAULT_API, board: [], seenHint: false,
   weapon: 'fists', weapons: { fists: { own: true, lvl: 0 } },
 });
 export let S = DEF();
 try {
-  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
+  const raw = localStorage.getItem(KEY) || localStorage.getItem('cherta_save_v4') || localStorage.getItem('cherta_save_v3') || localStorage.getItem('cherta_save_v2') || localStorage.getItem('cherta_save_v1');
   if (raw) {
     const p = JSON.parse(raw);
     S = Object.assign(DEF(), p);
@@ -37,19 +37,20 @@ export function calc() {
   const w = WEAPONS[S.weapon] || WEAPONS.fists;
   const wl = Math.min(W_MAX, S.weapons[S.weapon]?.lvl || 0);
   D = {
-    wLvl: wl, kind: w.kind, arc: w.arc, kb: w.kb, pierce: w.pierce || 0, steal: w.steal || 0, shock: w.shock || 0,
-    dmg: 10 * (1 + .14 * st.str) * lm * w.dmg * (1 + .2 * wl),
-    rate: Math.min(4.5, w.rate * (1 + .03 * st.agi) * (1 + .04 * wl)),
+    wLvl: wl, kind: w.kind, kb: w.kb * (1 + .05 * st.str), pierce: w.pierce || 0, steal: w.steal || 0, shock: w.shock || 0,
+    dmg: 10 * (1 + .18 * st.str) * lm * w.dmg * (1 + .2 * wl),
+    rate: Math.min(5, w.rate * (1 + .06 * st.agi) * (1 + .04 * wl)),
     range: w.range + wl * 2,
-    maxHp: Math.round((100 + 18 * st.vit) * lm),
-    crit: Math.min(.65, .05 + .012 * st.pre + (w.crit || 0)),
-    critM: 1.5 + .04 * st.pre,
-    dodge: Math.min(.3, .005 * st.agi),
-    regen: .25 * st.vit,
-    move: 170 + 2 * st.agi,
-    goldM: 1 + .05 * st.lck, xpM: 1 + .04 * st.lck,
-    tDmg: 1 + .12 * st.eng, tRate: 1 + .04 * st.eng,
-    whirlCd: 7 * (1 - Math.min(.35, .01 * st.agi)),
+    swingDur: (w.kind === 'slam' ? .3 : w.kind === 'spin' ? .34 : .2) / (1 + .05 * st.agi),
+    maxHp: Math.round((100 + 22 * st.vit) * lm),
+    crit: Math.min(.7, .05 + .015 * st.pre + (w.crit || 0)),
+    critM: 1.5 + .05 * st.pre,
+    dodge: Math.min(.4, .01 * st.agi),
+    regen: .35 * st.vit,
+    move: 170 + 4 * st.agi,
+    goldM: 1 + .06 * st.lck, xpM: 1 + .05 * st.lck,
+    tDmg: 1 + .14 * st.eng, tRate: 1 + .05 * st.eng, supportM: 1 + .08 * st.eng,
+    whirlCd: 7 * (1 - Math.min(.35, .012 * st.agi)),
     cap: BAL.statCap(S.level),
   };
 }
@@ -68,7 +69,7 @@ export function addStat(k, n) {
   if (room <= 0) return false;
   S.stats[k] += room; S.pts -= room;
   const om = D.maxHp; calc();
-  emit('stats', { hpDelta: D.maxHp - om }); saveSoon(); return true;
+  emit('stats', { hpDelta: D.maxHp - om, k, n: room }); saveSoon(); return true;
 }
 export function respec() {
   const cost = BAL.respecCost(S.level), total = Object.values(S.stats).reduce((a, b) => a + b, 0);
