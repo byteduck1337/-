@@ -6,7 +6,8 @@ import { play, weaponSound } from './audio.js';
 import * as game from './game.js';
 import { drawBattle, drawMenu, practice } from './render.js';
 import * as ui from './ui.js';
-import { setBoil, clamp } from './utils.js';
+import * as net from './net.js';
+import { setBoil } from './utils.js';
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
@@ -16,7 +17,6 @@ let failed = false;
 function resize() {
   const oldCx = view.cx, oldGround = view.ground;
   computeView();
-  /* земля всегда выше дока: оверлеи не пересекаются с игровым полем */
   const dh = dock && view.screen === 'battle' ? dock.getBoundingClientRect().height : 0;
   view.dockH = dh;
   view.ground = Math.max(170, view.H - dh - 30);
@@ -53,6 +53,7 @@ ui.init();
 inputInit(canvas);
 resize();
 setScreen('menu');
+net.initIdentity();
 window.__booted = true;
 document.getElementById('boot').classList.add('hidden');
 
