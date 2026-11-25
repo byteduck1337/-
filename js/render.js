@@ -180,7 +180,7 @@ function drawBuilding(c, G, i) {
     c.save(); c.translate(tx, gy - 70 - lvl * 3); c.rotate(Math.PI / 4);
     c.strokeStyle = ACC; c.strokeRect(-7, -7, 14, 14); c.restore();
     c.strokeStyle = 'rgba(70,242,142,.25)'; c.setLineDash([4, 6]); c.lineWidth = 1;
-    c.beginPath(); c.arc(tx, gy - 30, 220, 0, TAU); c.stroke(); c.setLineDash([]);
+    c.beginPath(); c.arc(tx, gy - 30, 170, 0, TAU); c.stroke(); c.setLineDash([]);
     c.fillStyle = ACC; c.globalAlpha = .5 + .4 * Math.sin(b.timer * 3); c.beginPath(); c.arc(tx, gy - 70 - lvl * 3, 3, 0, TAU); c.fill(); c.globalAlpha = 1;
   } else {
     const bw = 72, bh = 40, x = tx - bw / 2, y = gy - bh;
@@ -251,11 +251,10 @@ export function drawBattle(c, G, now) {
   const shx = G.shake ? rnd(-G.shake, G.shake) : 0, shy = G.shake ? rnd(-G.shake, G.shake) : 0;
   c.save(); c.translate(shx, shy);
   drawMotes(c, G.player.x);
-  const lineX = G.player.x;
   c.strokeStyle = 'rgba(70,242,142,.14)'; c.lineWidth = 1.5; c.setLineDash([4, 7]);
-  c.beginPath(); c.moveTo(lineX, view.ground - 170); c.lineTo(lineX, view.ground + 10); c.stroke(); c.setLineDash([]);
+  c.beginPath(); c.moveTo(view.cx, view.ground - 170); c.lineTo(view.cx, view.ground + 10); c.stroke(); c.setLineDash([]);
   c.fillStyle = 'rgba(70,242,142,.35)'; c.font = '600 8px "JetBrains Mono",monospace'; c.textAlign = 'center';
-  c.fillText('Ч Е Р Т А', lineX, view.ground - 178);
+  c.fillText('Ч Е Р Т А', view.cx, view.ground - 178);
   groundLine(c);
   for (const cr of G.craters) { c.globalAlpha = (1 - cr.t / 6) * .25; c.strokeStyle = INK; c.lineWidth = 1.5; c.beginPath(); c.arc(cr.x, view.ground, cr.r, Math.PI, 0); c.stroke(); }
   c.globalAlpha = 1;
@@ -349,7 +348,12 @@ export function drawMenu(c, now, dt) {
   for (const e of idleEnemies) {
     e.ph += dt * 1.4 * e.freq;
     const base = e.side < 0 ? 40 + e.k * 34 : view.W - 40 - e.k * 34;
-    figure(c, { x: base + Math.sin(now * .001 + e.seed) * 6, gy: view.ground, s: e.s, ph: e.ph, face: e.side < 0 ? 1 : -1, seed: e.seed, gait: e.gait, freq: e.freq, asym: e.asym, armAmp: e.armAmp, tilt: e.tilt, alpha: .55, thick: 2 });
+    figure(c, { x: base + Math.sin(menuT * .5 + e.seed) * 6, gy: view.ground + (e.k % 2) * 6 - (e.gait === 'fly' ? 50 : 0), s: e.s, ph: e.ph, face: e.side < 0 ? 1 : -1, seed: e.seed, gait: e.gait, freq: e.freq, asym: e.asym, armAmp: e.armAmp, tilt: e.tilt, alpha: .16, thick: e.gait === 'stomp' ? 3 : 1.8 });
   }
-  figure(c, { x: fx, gy: view.ground + 2, s: 46, ph: now * .002, face: 1, seed: 7, swing: menuSwing, swingKind: D.kind, weapon: S.weapon, tier: D.wLvl, thick: 2.6, col: INK });
+  if (menuSwing >= 0) drawSlash(c, { x: fx, y: view.ground - 60, t: menuSwing * D.swingDur, kind: D.kind, face: 1, tier: D.wLvl, range: D.range, str: S.stats.str });
+  figure(c, { x: fx, gy: view.ground + Math.sin(menuT * 1.8) * 2, s: 48, ph: Math.sin(menuT * .9) * .25, face: 1, seed: 42, swing: menuSwing, swingKind: D.kind, weapon: S.weapon, tier: D.wLvl, thick: 2.6 + Math.min(1.6, S.stats.str * .06), gait: 'walk' });
+  c.fillStyle = 'rgba(242,242,238,.4)'; c.font = '600 9px "JetBrains Mono",monospace'; c.textAlign = 'center';
+  c.fillText(`${WEAPONS[S.weapon].name}${D.wLvl ? ' · УР.' + D.wLvl : ''} · УР. БОЙЦА ${S.level}`, fx, view.ground + 34);
+  c.font = '600 15px Caveat,cursive'; c.fillStyle = 'rgba(70,242,142,.5)';
+  c.fillText(' space — взмах ', fx, view.ground - 170);
 }
