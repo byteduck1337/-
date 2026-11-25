@@ -1,6 +1,8 @@
-import { BAL, STATS, WEAPONS, W_MAX, wUpCost, BUILDINGS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, DUP_REFUND, RARITY, PERKS, sealsFor } from './config.js?v=8';
+import { BAL, STATS, WEAPONS, W_MAX, wUpCost, BUILDINGS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, RARITY, PERKS, sealsFor } from './config.js?v=8';
 import { emit } from './events.js?v=8';
 import { uuid } from './utils.js?v=8';
+
+const DUP_REFUND = 0.4;
 
 const KEY = 'cherta_save_v10';
 const LEGACY_KEYS = ['cherta_save_v9', 'cherta_save_v8', 'cherta_save_v7', 'cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'];
@@ -212,9 +214,8 @@ export function buyWeaponSkin(id) {
   const skin = WEAPON_SKINS.find(s => s.id === id);
   if (!skin || S.ownedSkins.weapon.includes(id)) return false;
   const req = skin.req || {};
-  if (req.kills && (S.weaponKills[S.weapon] || 0) + (Object.values(S.weaponKills).reduce((a, b) => a + b, 0)) < req.kills) {
-    if ((Object.values(S.weaponKills).reduce((a, b) => a + b, 0)) < req.kills) return false;
-  }
+  const totalKills = Object.values(S.weaponKills).reduce((a, b) => a + b, 0);
+  if (req.kills && totalKills < req.kills) return false;
   if (req.own && !S.weapons[req.own]?.own) return false;
   if (S.gold < skin.cost) return false;
   S.gold -= skin.cost;
