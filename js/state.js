@@ -1,8 +1,9 @@
-import { BAL, STATS, WEAPONS, W_MAX, wUpCost, BUILDINGS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, RARITY, PERKS, sealsFor } from './config.js?v=8';
+import { BAL, STATS, WEAPONS, W_MAX, wUpCost, BUILDINGS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, PERKS, sealsFor } from './config.js?v=8';
 import { emit } from './events.js?v=8';
 import { uuid } from './utils.js?v=8';
 
 const DUP_REFUND = 0.4;
+const RARITY_W = [['legend', .03], ['epic', .12], ['rare', .3], ['common', .55]];
 
 const KEY = 'cherta_save_v10';
 const LEGACY_KEYS = ['cherta_save_v9', 'cherta_save_v8', 'cherta_save_v7', 'cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'];
@@ -236,11 +237,10 @@ export function openBox() {
   if (S.shards < BOX_COST) return null;
   S.shards -= BOX_COST;
   const roll = Math.random();
-  let rarity = 'common';
-  let acc = 0;
-  for (const r of ['legend', 'epic', 'rare', 'common']) {
-    acc += RARITY[r].w;
-    if (roll < acc) { rarity = r; break; }
+  let acc = 0, rarity = 'common';
+  for (const [name, w] of RARITY_W) {
+    acc += w;
+    if (roll < acc) { rarity = name; break; }
   }
   const pool = [];
   for (const s of CHAR_SKINS) if (s.rarity === rarity && !S.ownedSkins.char.includes(s.id)) pool.push({ kind: 'char', skin: s });
