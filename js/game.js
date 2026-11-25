@@ -1,4 +1,4 @@
-import { BAL, ENEMIES, BUILDINGS, bUpCost, SLOTS, BOSS_ORDER, skipCost } from './config.js?v=8';
+import { BAL, ENEMIES, BUILDINGS, bUpCost, SLOTS, BOSS_ORDER, skipCost, WEAPONS } from './config.js?v=8';
 import { S, D, calc, gainGold, gainXp, saveNow, saveSoon, newRunId } from './state.js?v=8';
 import { on, emit } from './events.js?v=8';
 import { view } from './view.js?v=8';
@@ -32,14 +32,16 @@ export function startRun(startWave = 1) {
 }
 export function skipWaves(n) {
   if (!G || G.phase !== 'inter' || G.over) return false;
+  if (G.cleared < G.wave - 2) { emit('toast', 'нельзя скипать вперёд бесконечно', 'red'); return false; }
   const cost = skipCost(S.gold, n);
   if (S.gold < cost) return false;
   S.gold -= cost;
   G.wave += n; G.skipped += n;
   G.interT = Math.max(G.interT, 4);
   if (G.wave > S.best) S.best = G.wave;
+  G.buildings.forEach(b => { if (b?.type === 'wall') b.hp = Math.max(1, b.hp - b.maxHp * .3); });
   emit('gold', S.gold);
-  emit('banner', `ПРОПУЩЕНО ${n} ВОЛН`, `−¤${cost} · следующая волна ${G.wave + 1} · наград за пропуск нет`, 'gold');
+  emit('banner', `ПРОПУЩЕНО ${n} ВОЛН`, `−¤${cost} · следующая волна ${G.wave + 1} · стены теряют 30%`, 'gold');
   emit('wave:inter', G.wave + 1);
   play('warp'); saveSoon();
   return true;
@@ -50,9 +52,11 @@ export function panelPause(on) { if (G) { G.panelPause = on; emit('panelPause', 
 export function slotX(i) { const spread = Math.min(300, view.W * .34); return view.cx + [-1, -.5, .5, 1][i] * spread; }
 export function bDmg(b) { return (BUILDINGS[b.type].dmg || 0) * Math.pow(1.32, b.lvl - 1) * D.tDmg; }
 export function bRate(b) { return Math.min(6, (BUILDINGS[b.type].rate || 1) * (1 + .06 * (b.lvl - 1)) * D.tRate); }
+export function canBuild(type) { const def = BUILDINGS[type]; return def && (def.unlock || 0) <= (S.best || 0); }
+export function canBuyWeapon(id) { const def = WEAPONS[id]; return def && (def.unlock || 0) <= (S.best || 0); }
 export function buildBuilding(i, type) {
   const def = BUILDINGS[type];
-  if (!G || G.buildings[i] || !def || S.gold < def.cost) return false;
+  if (!G || G.buildings[i] || !def || S.gold < def.cost || !canBuild(type)) return false;
   S.gold -= def.cost;
   const b = { type, lvl: 1, cd: rnd(.2, .6), spent: def.cost, trace: new Array(32).fill(0), ti: 0, flash: 0, aim: 0, recoil: 0, timer: 0 };
   if (type === 'wall') { b.maxHp = def.hp * (1 + .08 * S.stats.eng); b.hp = b.maxHp; }
@@ -224,7 +228,7 @@ function auraMult() {
   let dmg = 1, rate = 1;
   for (let i = 0; i < SLOTS; i++) {
     const b = G.buildings[i];
-    if (b?.type === 'totem' && Math.abs(G.player.x - slotX(i)) < 170) { dmg *= 1.12 + .05 * b.lvl; rate *= 1.1 + .04 * b.lvl; }
+    if (b?.type === 'totem' && Math.abs(G.player.x - slotX(i)) < 220) { dmg *= 1.12 + .05 * b.lvl; rate *= 1.1 + .04 * b.lvl; }
   }
   return { dmg, rate };
 }
@@ -247,13 +251,13 @@ function updPlayer(dt) {
   let mv = 0;
   if (keys.has('KeyA') || keys.has('ArrowLeft')) mv -= 1;
   if (keys.has('KeyD') || keys.has('ArrowRight')) mv += 1;
-  const zone = Math.min(120, view.W * .13);
+  const minX = 40, maxX = view.W - 40;
   if (pointer.dragX !== null) {
-    const target = clamp(pointer.dragX, view.cx - zone, view.cx + zone), d = target - p.x;
+    const target = clamp(pointer.dragX, minX, maxX), d = target - p.x;
     if (Math.abs(d) > 4) { mv = Math.sign(d); p.x += clamp(d, -D.move * dt, D.move * dt); }
   } else if (mv) { p.x += mv * D.move * dt; p.face = mv; }
   p.moving = !!mv;
-  p.x = clamp(p.x, view.cx - zone, view.cx + zone);
+  p.x = clamp(p.x, minX, maxX);
   p.ph += Math.abs(mv) * dt * 9;
   if (p.swing >= 0) { p.swing += dt / D.swingDur; if (p.swing > 1) p.swing = -1; }
   p.atkCd -= dt * (G.rage > 0 ? 1.6 : 1) * aura.rate;
@@ -310,7 +314,7 @@ function updBuildings(dt) {
       b.timer += dt;
       if (b.timer >= 5) {
         b.timer = 0; b.flash = .2;
-        const val = Math.round((4 + b.lvl * 2 + Math.floor(G.wave * .4)) * D.supportM * D.goldM);
+        const val = Math.round((6 + b.lvl * 3 + Math.floor(G.wave * .8)) * D.supportM * D.goldM);
         G.pickups.push({ kind: 'gold', x: tx, y: view.ground - 50, vx: rnd(-40, 40), vy: -160, val, t: 0, ph: 0 });
         play('coin');
       }

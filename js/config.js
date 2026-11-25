@@ -1,24 +1,23 @@
-/* Общий сервер всех игроков. Один адрес на всех, меняется только здесь. */
 export const API_BASE = 'https://g3g.okeysexsex.workers.dev';
 
 export const BAL = {
-  startGold: 200, ptsPerLevel: 3,
-  xpNeed: l => Math.round(50 * Math.pow(l, 1.6)),
-  statCap: l => 4 + Math.floor(l * .9),
-  respecCost: l => 100 + 40 * l,
-  eHp: w => 22 * Math.pow(1.17, w - 1),
-  eDmg: w => 5 * Math.pow(1.11, w - 1),
+  startGold: 120, ptsPerLevel: 3,
+  xpNeed: l => Math.round(60 * Math.pow(l, 1.65)),
+  statCap: l => 3 + Math.floor(l * .7),
+  respecCost: l => 200 + 80 * l,
+  eHp: w => 24 * Math.pow(1.18, w - 1),
+  eDmg: w => 5 * Math.pow(1.12, w - 1),
   eSpd: w => Math.min(96, 44 + w * .9),
-  count: w => Math.min(36, 6 + Math.floor(w * 1.5)),
-  interval: w => Math.max(.38, 1.45 - w * .045),
-  killGold: w => 1 + Math.floor(w * .65),
-  killXp: w => Math.ceil(2.4 * Math.pow(1.12, w - 1)),
-  waveGold: w => 6 + 2 * w,
-  waveXp: w => 8 + 3 * w,
+  count: w => Math.min(30, 5 + Math.floor(w * 1.3)),
+  interval: w => Math.max(.32, 1.3 - w * .04),
+  killGold: w => Math.round(1.5 * Math.pow(1.09, w - 1)),
+  killXp: w => Math.ceil(3 * Math.pow(1.1, w - 1)),
+  waveGold: w => Math.round(10 * Math.pow(1.07, w - 1)),
+  waveXp: w => Math.round(12 * Math.pow(1.08, w - 1)),
   armor: w => 2 + w * .35,
 };
 
-export const skipCost = (gold, n) => Math.max(n === 5 ? 25 : 50, Math.ceil(gold * (n === 5 ? .25 : .5)));
+export const skipCost = (gold, n) => Math.max(n === 5 ? 100 : 200, Math.ceil(gold * (n === 5 ? .5 : .75)));
 
 export const STATS = [
   { k: 'str', n: 'СИЛА', eff: s => `урон ×${(1 + .18 * s).toFixed(2)} · отброс +${s * 5}% · толще рука и след` },
@@ -30,31 +29,31 @@ export const STATS = [
 ];
 
 export const WEAPONS = {
-  fists:  { name: 'КУЛАКИ', flavor: 'то, с чего все начинают', cost: 0, dmg: 1, rate: 1.15, range: 62, kb: 6, kind: 'jab', crit: 0, pierce: 0, steal: 0 },
-  knife:  { name: 'НОЖ', flavor: 'быстрый. тихий. свой.', cost: 80, dmg: 1.2, rate: 1.7, range: 74, kb: 8, kind: 'jab', crit: .06, pierce: 0, steal: 0 },
-  bat:    { name: 'БИТА', flavor: 'убеждает с одного раза', cost: 240, dmg: 1.8, rate: .95, range: 96, kb: 46, kind: 'swing', crit: 0, pierce: 2, steal: 0 },
-  katana: { name: 'КАТАНА', flavor: 'режет строй, а не бойца', cost: 560, dmg: 2.3, rate: 1.25, range: 122, kb: 14, kind: 'swing', crit: .1, pierce: 5, steal: 0 },
-  hammer: { name: 'МОЛОТ', flavor: 'аргумент против брони', cost: 1250, dmg: 3.8, rate: .55, range: 104, kb: 96, kind: 'slam', crit: 0, pierce: 99, steal: 0, shock: 82 },
-  scythe: { name: 'КОСА', flavor: 'круг замкнулся', cost: 2600, dmg: 3, rate: .8, range: 150, kb: 30, kind: 'spin', crit: .04, pierce: 99, steal: .05 },
+  fists:  { name: 'КУЛАКИ', flavor: 'то, с чего все начинают', cost: 0, dmg: 1, rate: 1.15, range: 62, kb: 6, kind: 'jab', crit: 0, pierce: 0, steal: 0, unlock: 0 },
+  knife:  { name: 'НОЖ', flavor: 'быстрый. тихий. свой.', cost: 150, dmg: 1.2, rate: 1.7, range: 74, kb: 8, kind: 'jab', crit: .06, pierce: 0, steal: 0, unlock: 0 },
+  bat:    { name: 'БИТА', flavor: 'убеждает с одного раза', cost: 600, dmg: 1.8, rate: .95, range: 96, kb: 46, kind: 'swing', crit: 0, pierce: 2, steal: 0, unlock: 4 },
+  katana: { name: 'КАТАНА', flavor: 'режет строй, а не бойца', cost: 1600, dmg: 2.3, rate: 1.25, range: 122, kb: 14, kind: 'swing', crit: .1, pierce: 5, steal: 0, unlock: 8 },
+  hammer: { name: 'МОЛОТ', flavor: 'аргумент против брони', cost: 3800, dmg: 3.8, rate: .55, range: 104, kb: 96, kind: 'slam', crit: 0, pierce: 99, steal: 0, shock: 82, unlock: 12 },
+  scythe: { name: 'КОСА', flavor: 'круг замкнулся', cost: 9000, dmg: 3, rate: .8, range: 150, kb: 30, kind: 'spin', crit: .04, pierce: 99, steal: .05, unlock: 18 },
 };
 export const WEAPON_ORDER = ['fists', 'knife', 'bat', 'katana', 'hammer', 'scythe'];
 export const W_MAX = 5;
-export const wUpCost = (id, lvl) => Math.round(Math.max(60, WEAPONS[id].cost * .45) * Math.pow(1.75, lvl));
+export const wUpCost = (id, lvl) => Math.round(Math.max(80, WEAPONS[id].cost * .5) * Math.pow(1.9, lvl));
 
 export const SLOTS = 4;
 export const BUILDINGS = {
-  mg:     { name: 'ПУЛЕМЁТ', cost: 60, dmg: 6, rate: 3, range: 260, kind: 'attack', tag: 'АТАКА', desc: 'трассеры по одной цели · ствол крутится к врагу' },
-  rail:   { name: 'РЕЛЬСА', cost: 110, dmg: 30, rate: .55, range: 340, kind: 'attack', tag: 'АТАКА', desc: 'заряжается и прошивает всех на линии' },
-  mortar: { name: 'МОРТИРА', cost: 90, dmg: 22, rate: .8, range: 300, kind: 'attack', tag: 'АТАКА', desc: 'навесной снаряд · взрыв и воронка' },
-  tesla:  { name: 'КАТУШКА', cost: 140, dmg: 15, rate: 1.1, range: 230, kind: 'attack', tag: 'АТАКА', desc: 'молния перескакивает на 3+ целей' },
-  spikes: { name: 'ШИПЫ', cost: 45, dmg: 9, rate: 2, range: 74, kind: 'trap', tag: 'ЛОВУШКА', desc: 'режет каждого, кто проходит по земле' },
-  wall:   { name: 'СТЕНА', cost: 70, hp: 150, kind: 'wall', tag: 'ОБОРОНА', desc: 'враги ломают её вместо героя · есть прочность' },
-  gen:    { name: 'ГЕНЕРАТОР', cost: 120, kind: 'econ', tag: 'ЭКОНОМИКА', desc: '+золото каждые 5с · окупается за забег' },
-  fix:    { name: 'РЕМСТАНЦИЯ', cost: 100, kind: 'support', tag: 'ПОДДЕРЖКА', desc: 'лечит героя импульсом каждые 4с' },
-  totem:  { name: 'ТОТЕМ', cost: 150, kind: 'aura', tag: 'АУРА', desc: '+урон и темп герою, пока он в радиусе' },
+  mg:     { name: 'ПУЛЕМЁТ', cost: 90, dmg: 6, rate: 3, range: 260, kind: 'attack', tag: 'АТАКА', desc: 'трассеры по одной цели · ствол крутится к врагу', unlock: 0 },
+  rail:   { name: 'РЕЛЬСА', cost: 260, dmg: 30, rate: .55, range: 340, kind: 'attack', tag: 'АТАКА', desc: 'заряжается и прошивает всех на линии', unlock: 11 },
+  mortar: { name: 'МОРТИРА', cost: 180, dmg: 22, rate: .8, range: 300, kind: 'attack', tag: 'АТАКА', desc: 'навесной снаряд · взрыв и воронка', unlock: 5 },
+  tesla:  { name: 'КАТУШКА', cost: 320, dmg: 15, rate: 1.1, range: 230, kind: 'attack', tag: 'АТАКА', desc: 'молния перескакивает на 3+ целей', unlock: 13 },
+  spikes: { name: 'ШИПЫ', cost: 60, dmg: 9, rate: 2, range: 74, kind: 'trap', tag: 'ЛОВУШКА', desc: 'режет каждого, кто проходит по земле', unlock: 0 },
+  wall:   { name: 'СТЕНА', cost: 110, hp: 150, kind: 'wall', tag: 'ОБОРОНА', desc: 'враги ломают её вместо героя · есть прочность', unlock: 3 },
+  gen:    { name: 'ГЕНЕРАТОР', cost: 220, kind: 'econ', tag: 'ЭКОНОМИКА', desc: '+золото каждые 5с · окупается за забег', unlock: 7 },
+  fix:    { name: 'РЕМСТАНЦИЯ', cost: 180, kind: 'support', tag: 'ПОДДЕРЖКА', desc: 'лечит героя импульсом каждые 4с', unlock: 9 },
+  totem:  { name: 'ТОТЕМ', cost: 300, kind: 'aura', tag: 'АУРА', desc: '+урон и темп герою, пока он в радиусе', unlock: 16 },
 };
 export const B_ORDER = ['mg', 'rail', 'mortar', 'tesla', 'spikes', 'wall', 'gen', 'fix', 'totem'];
-export const bUpCost = (type, lvl) => Math.round(BUILDINGS[type].cost * .65 * Math.pow(1.55, lvl));
+export const bUpCost = (type, lvl) => Math.round(BUILDINGS[type].cost * .7 * Math.pow(1.7, lvl));
 
 export const ENEMIES = {
   walk:   { name: 'ШАГУН', hp: 1, dmg: 1, spd: 1, xp: 1, gold: 1, s: 30, from: 1, armor: 0, gait: 'walk' },

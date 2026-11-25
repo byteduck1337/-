@@ -1,8 +1,8 @@
-import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon } from './state.js?v=8';
+import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon, weaponUnlocked, prestige, buyPerk } from './state.js?v=8';
 import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost } from './config.js?v=8';
 import { on, emit } from './events.js?v=8';
 import { view } from './view.js?v=8';
-import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves } from './game.js?v=8';
+import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves, canBuild } from './game.js?v=8';
 import { play, setMuted, init as audioInit } from './audio.js?v=8';
 import { isConfigured, status, world, worldMeta, cooldownLeft, changeNick, fetchWorld, submitRun, recordLocal } from './net.js?v=8';
 import { fmtN, fmtT, esc, NICK_RE, clamp } from './utils.js?v=8';
@@ -82,6 +82,8 @@ export function init() {
   on('boss', e => { $('bossWrap').classList.toggle('hidden', !e); if (e && G) $('bossName').textContent = ENEMIES[e.type].name + ' · ВОЛНА ' + G.wave; });
   on('board', () => { if (sheetName === 'records') renderSheet(); refreshMenuMeta(); });
   on('screen', name => { if (name === 'menu') { closeSheet(); closePop(); refreshMenuMeta(); fetchWorld(); } });
+  on('prestige', () => { refreshMenuMeta(); refreshWeaponHud(); refreshGold(); refreshXp(); if (sheetName === 'stats') renderSheet(); toast('ПРЕСТИЖ ПРИНЯТ', 'gold'); });
+  on('perks', () => { refreshMenuMeta(); if (sheetName === 'stats') renderSheet(); });
 
   syncSound(); setSpeed(S.speed, true);
   $('grain').style.display = S.grain ? '' : 'none';
@@ -148,7 +150,8 @@ function refreshMenuMeta() {
   $('mGold').textContent = '¤ ' + fmtN(S.gold);
   $('mLvl').textContent = 'УР. ' + S.level;
   const st = S.stats;
-  $('mStats').innerHTML = `<b>${esc(S.nick)}</b> · ${WEAPONS[S.weapon].name}${D.wLvl ? ' ур.' + D.wLvl : ''} · СИЛ ${st.str} · ЛОВ ${st.agi} · СТК ${st.vit} · ТЧН ${st.pre} · ИНЖ ${st.eng} · УДЧ ${st.lck}` +
+  const ess = S.essence > 0 ? ` · ЭССЕНЦИЯ ${S.essence}` : '';
+  $('mStats').innerHTML = `<b>${esc(S.nick)}</b> · ${WEAPONS[S.weapon].name}${D.wLvl ? ' ур.' + D.wLvl : ''} · СИЛ ${st.str} · ЛОВ ${st.agi} · СТК ${st.vit} · ТЧН ${st.pre} · ИНЖ ${st.eng} · УДЧ ${st.lck}${ess}` +
     (S.pts ? `<br><span class="pts">+${S.pts} ОЧКА НЕ РАСПРЕДЕЛЕНЫ — ПРОКАЧКА</span>` : '') +
     `<br><span class="derived">${derivedText()}</span>` +
     `<br>забегов ${S.runs} · убийств ${fmtN(S.kills)} · лучшая волна <b>${S.best}</b>`;
@@ -192,24 +195,32 @@ function renderSheet() {
 }
 function tierPips(lvl) { return `<span class="tier">${Array.from({ length: W_MAX }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>`; }
 function arsenalHTML() {
-  let h = `<h3>АРСЕНАЛ</h3><div class="sub">оружие остаётся между забегами. постройки строятся в бою на 4 постах.</div>`;
+  let h = `<h3>АРСЕНАЛ</h3><div class="sub">оружие остаётся между забегами. постройки строятся в бою на 4 постах. открытие — по лучшей волне.</div>`;
   for (const id of WEAPON_ORDER) {
     const w = WEAPONS[id], rec = S.weapons[id], own = !!rec?.own, eq = S.weapon === id;
+    const locked = !weaponUnlocked(id);
     const dmg = (10 * w.dmg * (1 + .2 * (rec?.lvl || 0))).toFixed(0);
     const feat = w.shock ? 'ударная волна' : w.steal ? 'вампиризм 5%' : w.pierce >= 99 ? 'игнорирует броню' : w.pierce ? `пробой ${w.pierce}` : w.kind === 'jab' ? 'быстрый тычок' : 'широкая дуга';
-    h += `<div class="srow wrow"><div class="head"><span class="name ${eq ? 'eq' : ''}">${w.name}${own ? tierPips(rec.lvl) : ''}</span><span class="gold">${own ? (eq ? 'В РУКАХ' : 'КУПЛЕНО') : '¤' + w.cost}</span></div>
+    h += `<div class="srow wrow"><div class="head"><span class="name ${eq ? 'eq' : ''}">${w.name}${own ? tierPips(rec.lvl) : ''}</span><span class="gold">${own ? (eq ? 'В РУКАХ' : 'КУПЛЕНО') : locked ? 'ЗАКРЫТО' : '¤' + w.cost}</span></div>
       <div class="flavor">${w.flavor}</div>
       <div class="nums">урон <b>~${dmg}</b> · темп <b>${w.rate}/с</b> · дальность <b>${w.range}</b> · ${feat}</div>
-      <div class="acts">
-        ${!own ? `<button class="ibtn small ${S.gold >= w.cost ? 'fill' : ''}" data-buy="${id}" ${S.gold >= w.cost ? '' : 'disabled'}>КУПИТЬ ¤${w.cost}</button>` : ''}
-        ${own && !eq ? `<button class="ibtn small" data-equip="${id}">ВЗЯТЬ</button>` : ''}
-        ${own && rec.lvl < W_MAX ? `<button class="ibtn small" data-upw="${id}" ${S.gold >= wUpCost(id, rec.lvl) ? '' : 'disabled'}>УЛУЧШИТЬ ¤${wUpCost(id, rec.lvl)}</button>` : ''}
-        ${own && rec.lvl >= W_MAX ? `<span class="dim" style="font-size:9px;letter-spacing:.14em">МАКСИМУМ</span>` : ''}
-      </div></div>`;
+      <div class="acts">`;
+    if (locked) h += `<span class="dim" style="font-size:9px;letter-spacing:.14em">ОТКРЫВАЕТСЯ НА ВОЛНЕ ${w.unlock}</span>`;
+    else {
+      if (!own) h += `<button class="ibtn small ${S.gold >= w.cost ? 'fill' : ''}" data-buy="${id}" ${S.gold >= w.cost ? '' : 'disabled'}>КУПИТЬ ¤${w.cost}</button>`;
+      if (own && !eq) h += `<button class="ibtn small" data-equip="${id}">ВЗЯТЬ</button>`;
+      if (own && rec.lvl < W_MAX) h += `<button class="ibtn small" data-upw="${id}" ${S.gold >= wUpCost(id, rec.lvl) ? '' : 'disabled'}>УЛУЧШИТЬ ¤${wUpCost(id, rec.lvl)}</button>`;
+      if (own && rec.lvl >= W_MAX) h += `<span class="dim" style="font-size:9px;letter-spacing:.14em">МАКСИМУМ</span>`;
+    }
+    h += `</div></div>`;
   }
   h += `<div class="srow"><div class="nums" style="margin-bottom:6px"><b>ПОСТРОЙКИ</b> — 4 поста, ставятся в бою:</div>`;
-  for (const k of B_ORDER) { const t = BUILDINGS[k]; h += `<div class="bcat"><b>${t.name}</b><span class="cost">¤${t.cost}</span><small><span class="tag">${t.tag}</span> · ${t.desc}</small></div>`; }
-  h += `</div><div class="hintline">пропуск волн: 5 = 25% золота, 10 = 50% (минимум ¤25/¤50), без наград.<br>сила утолщает руку и след · ловкость ускоряет взмах и даёт шлейф.</div>`;
+  for (const k of B_ORDER) {
+    const t = BUILDINGS[k];
+    const locked = (t.unlock || 0) > (S.best || 0);
+    h += `<div class="bcat ${locked ? 'dim' : ''}"><b>${t.name}</b><span class="cost">${locked ? `волна ${t.unlock}` : '¤' + t.cost}</span><small><span class="tag">${t.tag}</span> · ${t.desc}</small></div>`;
+  }
+  h += `</div><div class="hintline">пропуск волн: 5 = 50% золота (мин ¤100), 10 = 75% (мин ¤200), без наград, стены теряют 30%.<br>сила утолщает руку и след · ловкость ускоряет взмах и даёт шлейф.</div>`;
   return h;
 }
 function statsHTML() {
@@ -222,8 +233,15 @@ function statsHTML() {
     h += `<div class="srow statrow"><div><div class="n">${d.n}</div><div class="e">${d.eff(v)}</div></div><div class="v">${v}<small>/ ${D.cap}</small></div><button class="plus" data-stat="${d.k}" ${can ? '' : 'disabled'}>+</button></div>`;
   }
   const total = Object.values(S.stats).reduce((a, b) => a + b, 0);
-  h += `<div class="srow"><button class="ibtn small red" id="respecBtn" ${total && S.gold >= BAL.respecCost(S.level) ? '' : 'disabled'}>СБРОС СТАТОВ · ¤${BAL.respecCost(S.level)}</button></div>
-    <div class="hintline">SHIFT+КЛИК = +5 · лимит на стат растёт с уровнем.<br>сброс — только здесь, за золото. постройки каждый забег строятся заново.</div>`;
+  h += `<div class="srow"><button class="ibtn small red" id="respecBtn" ${total && S.gold >= BAL.respecCost(S.level) ? '' : 'disabled'}>СБРОС СТАТОВ · ¤${BAL.respecCost(S.level)}</button></div>`;
+  h += `<h3 style="margin-top:18px">ПРЕСТИЖ</h3><div class="sub">эссенция за лучшую волну: ${Math.floor(S.best / 5)} доступно. обнуляет забег, но даёт постоянные перки.</div>`;
+  h += `<div class="srow"><div class="derived-box">ЭССЕНЦИЯ <b>${S.essence}</b><br>золото +${(S.perks.gold || 0) * 5}% · опыт +${(S.perks.xp || 0) * 5}% · стартовые очки +${S.perks.startPts || 0}</div>`;
+  h += `<div class="acts">`;
+  h += `<button class="ibtn small" data-perk="gold" ${S.essence >= 1 ? '' : 'disabled'}>+5% ЗОЛОТА · 1</button>`;
+  h += `<button class="ibtn small" data-perk="xp" ${S.essence >= 1 ? '' : 'disabled'}>+5% ОПЫТА · 1</button>`;
+  h += `<button class="ibtn small" data-perk="startPts" ${S.essence >= 2 ? '' : 'disabled'}>+1 СТАРТ-ОЧКО · 2</button>`;
+  h += `</div><div class="acts"><button class="ibtn small red" id="prestigeBtn" ${S.best >= 20 ? '' : 'disabled'}>ПРЕСТИЖ · +${Math.floor(S.best / 5)} ЭССЕНЦИИ</button></div></div>`;
+  h += `<div class="hintline">SHIFT+КЛИК = +5 · лимит на стат растёт с уровнем.<br>престиж доступен с волны 20. сбрасывает забег, оружие, статы — эссенцию и перки оставляет.</div>`;
   return h;
 }
 function recordsHTML() {
@@ -257,7 +275,7 @@ function settingsHTML() {
     <div class="setrow"><span>ЧАСТИЦЫ</span><div class="seg">${['high', 'med', 'low'].map(q => `<button data-q="${q}" class="${S.quality === q ? 'on' : ''}">${{ high: 'ПОЛН', med: 'СРЕД', low: 'МИН' }[q]}</button>`).join('')}</div></div>
     <div class="setrow"><span>ПРЕДЛАГАТЬ ВОЗВРАТ<small>к лучшей волне при новом забеге</small></span><button class="sw ${S.askResume ? 'on' : ''}" id="setAsk"></button></div>
     <div class="setrow"><span>СЕРВЕР<small>общий лидборд · Cloudflare Worker</small></span><span style="font-size:10px;font-weight:700;letter-spacing:.14em;color:${connColor()}">${connText()}</span></div>
-    <div class="setrow"><span class="red">СТЕРЕТЬ СОХРАНЕНИЕ<small>уровень, оружие, золото, рекорды</small></span><button class="ibtn small red" id="wipeBtn">СТЕРЕТЬ</button></div>`;
+    <div class="setrow"><span class="red">СТЕРЕТЬ СОХРАНЕНИЕ<small>уровень, оружие, золото, рекорды, эссенция</small></span><button class="ibtn small red" id="wipeBtn">СТЕРЕТЬ</button></div>`;
 }
 function bindSheet() {
   const b = $('sheetBody');
@@ -265,7 +283,10 @@ function bindSheet() {
   b.querySelectorAll('[data-equip]').forEach(el => el.addEventListener('click', () => { if (equipWeapon(el.dataset.equip)) { play('click'); emit('menu:swing'); } }));
   b.querySelectorAll('[data-upw]').forEach(el => el.addEventListener('click', () => { if (upgradeWeapon(el.dataset.upw)) play('up'); else play('err'); }));
   b.querySelectorAll('[data-stat]').forEach(el => el.addEventListener('click', e => { if (addStat(el.dataset.stat, e.shiftKey ? 5 : 1)) play('up'); else play('err'); }));
+  b.querySelectorAll('[data-perk]').forEach(el => el.addEventListener('click', () => { if (buyPerk(el.dataset.perk)) play('up'); else play('err'); }));
   const rs = b.querySelector('#respecBtn'); if (rs) rs.addEventListener('click', () => { if (respec()) { play('build'); toast('Статы сброшены. Очки возвращены.', 'gold'); } else play('err'); });
+  const pb = b.querySelector('#prestigeBtn');
+  if (pb) { let arm = false; pb.addEventListener('click', () => { if (!arm) { arm = true; pb.textContent = 'ТОЧНО? СБРОС'; setTimeout(() => { arm = false; renderSheet(); }, 3000); return; } if (prestige()) play('level'); else play('err'); }); }
   b.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { boardTab = el.dataset.tab; play('click'); renderSheet(); if (boardTab === 'world') fetchWorld(); }));
   const rf = b.querySelector('#boardRefresh'); if (rf) rf.addEventListener('click', () => { play('click'); boardTab === 'world' ? fetchWorld() : renderSheet(); });
   const ni = b.querySelector('#nickInput'), ns = b.querySelector('#nickSave');
@@ -286,7 +307,7 @@ function bindSheet() {
   const sa = b.querySelector('#setAsk'); if (sa) sa.addEventListener('click', () => { S.askResume = !S.askResume; saveSoon(); play('click'); renderSheet(); });
   b.querySelectorAll('[data-q]').forEach(el => el.addEventListener('click', () => { S.quality = el.dataset.q; saveSoon(); emit('quality'); play('click'); renderSheet(); }));
   const wp = b.querySelector('#wipeBtn');
-  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v8', 'cherta_save_v7', 'cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
+  if (wp) { let arm = false; wp.addEventListener('click', () => { if (!arm) { arm = true; wp.textContent = 'ТОЧНО?'; setTimeout(() => { arm = false; wp.textContent = 'СТЕРЕТЬ'; }, 3000); return; } ['cherta_save_v9', 'cherta_save_v8', 'cherta_save_v7', 'cherta_save_v6', 'cherta_save_v5', 'cherta_save_v4', 'cherta_save_v3', 'cherta_save_v2', 'cherta_save_v1'].forEach(k => localStorage.removeItem(k)); location.reload(); }); }
 }
 function startNickTicker() { stopNickTicker(); nickTimer = setInterval(updateNickUI, 1000); }
 function stopNickTicker() { if (nickTimer) { clearInterval(nickTimer); nickTimer = null; } }
@@ -315,12 +336,13 @@ function renderPop(i) {
     h += `<div class="ps">инженерия усиливает атаки и поддержку. выбирай под волну:</div>`;
     for (const k of B_ORDER) {
       const tw = BUILDINGS[k];
-      h += `<button class="topt" data-act="build" data-type="${k}" ${S.gold >= tw.cost ? '' : 'disabled'}><b>${tw.name}</b><span class="cost">¤${tw.cost}</span><small><span class="tag">${tw.tag}</span> · ${tw.desc}${tw.dmg ? ` · ${tw.dmg}×${tw.rate}/с` : ''}${tw.hp ? ` · ${tw.hp} HP` : ''}</small></button>`;
+      const locked = !canBuild(k);
+      h += `<button class="topt" data-act="build" data-type="${k}" ${(!locked && S.gold >= tw.cost) ? '' : 'disabled'}><b>${tw.name}</b><span class="cost">${locked ? `волна ${tw.unlock}` : '¤' + tw.cost}</span><small><span class="tag">${tw.tag}</span> · ${tw.desc}${tw.dmg ? ` · ${tw.dmg}×${tw.rate}/с` : ''}${tw.hp ? ` · ${tw.hp} HP` : ''}</small></button>`;
     }
   } else {
     const cost = bUpCost(b.type, b.lvl), refund = Math.floor(b.spent * .5);
     const stat = b.type === 'wall' ? `прочность ${Math.round(b.hp)} / ${Math.round(b.maxHp)}` :
-      b.type === 'gen' ? `+¤${Math.round((4 + b.lvl * 2) * D.supportM)} / 5с` :
+      b.type === 'gen' ? `+¤${Math.round((6 + b.lvl * 3 + Math.floor(G.wave * .8)) * D.supportM)} / 5с` :
       b.type === 'fix' ? `+${Math.round((8 + b.lvl * 4) * D.supportM)} HP / 4с` :
       b.type === 'totem' ? `аура +${Math.round((.12 + .05 * b.lvl) * 100)}% урона` :
       `урон ${bDmg(b).toFixed(1)} · темп ${bRate(b).toFixed(2)}/с · <span class="acc">${Math.round(bDmg(b) * bRate(b))} DPS</span>`;
@@ -332,7 +354,7 @@ function renderPop(i) {
 }
 function onPopClick(e) {
   const b = e.target.closest('[data-act]'); if (!b || popSlot < 0) return;
-  if (b.dataset.act === 'build') buildBuilding(popSlot, b.dataset.type);
+  if (b.dataset.act === 'build') { if (!buildBuilding(popSlot, b.dataset.type)) play('err'); }
   else if (b.dataset.act === 'up') upgradeBuilding(popSlot);
   else if (b.dataset.act === 'sell') sellBuilding(popSlot);
   renderPosts(); if (popSlot >= 0) renderPop(popSlot);

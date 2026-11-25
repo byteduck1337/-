@@ -3,7 +3,6 @@ import { S, setIdentity, setNick, saveSoon, saveNow, pushLocal } from './state.j
 import { emit } from './events.js?v=8';
 import { uuid, NICK_RE } from './utils.js?v=8';
 
-/* Единственный источник кулдауна ника. Не реэкспортируется ниоткуда. */
 const NICK_COOLDOWN = 120;
 
 export const isConfigured = () => !!API_BASE;
@@ -101,7 +100,9 @@ export async function fetchWorld() {
 
 export async function submitRun(entry) {
   if (!isConfigured() || !identityReady) return { ok: false, status: 0, data: { error: 'нет связи с сервером' } };
-  return api('/api/submit', { id: S.playerId, token: S.playerToken, ...entry });
+  const payload = { id: S.playerId, token: S.playerToken, ...entry };
+  if (typeof S.essence === 'number') payload.essence = S.essence;
+  return api('/api/submit', payload);
 }
 
 export function recordLocal(entry) { pushLocal(entry); emit('board'); }
