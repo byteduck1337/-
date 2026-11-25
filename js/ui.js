@@ -1,5 +1,5 @@
 import { S, D, addStat, respec, buyWeapon, upgradeWeapon, equipWeapon, saveSoon, weaponUnlocked, buildingUnlocked, ascend, ascensionGain, buyPerk, buyCharSkin, buyWeaponSkin, equipCharSkin, equipWeaponSkin, openBox } from './state.js?v=8';
-import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost, SPEEDS, CHALLENGES, PERKS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, BOX3_COST, RARITY } from './config.js?v=8';
+import { BAL, STATS, WEAPONS, WEAPON_ORDER, W_MAX, wUpCost, BUILDINGS, B_ORDER, bUpCost, SLOTS, ENEMIES, skipCost, SPEEDS, CHALLENGES, PERKS, CHAR_SKINS, WEAPON_SKINS, BOX_COST, BOX3_COST } from './config.js?v=8';
 import { on, emit } from './events.js?v=8';
 import { view } from './view.js?v=8';
 import { G, endRun, pause, panelPause, buildBuilding, upgradeBuilding, sellBuilding, bDmg, bRate, whirl, rage, startRun, skipWaves } from './game.js?v=8';
@@ -8,6 +8,12 @@ import { isConfigured, status, world, worldMeta, cooldownLeft, changeNick, fetch
 import { fmtN, fmtT, esc, NICK_RE, clamp } from './utils.js?v=8';
 
 const $ = id => document.getElementById(id);
+const RARITY = {
+  common: { n: 'ОБЫЧНЫЙ', col: '#f2f2ee', w: .55 },
+  rare: { n: 'РЕДКИЙ', col: '#5db4ff', w: .3 },
+  epic: { n: 'ЭПИЧЕСКИЙ', col: '#c05dff', w: .12 },
+  legend: { n: 'ЛЕГЕНДАРНЫЙ', col: '#f5b942', w: .03 },
+};
 const SND_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
 const SND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
 let sheetName = null, boardTab = 'world', popSlot = -1, menuIdx = 0, lastSummary = null;
@@ -318,7 +324,7 @@ function challengesHTML() {
   for (const c of CHALLENGES) {
     const best = S.challenges[c.id] || 0;
     const done = best >= c.target;
-    h += `<div class="srow ${done ? '' : ''}"><div class="head"><span class="name">${c.n}</span><span class="gold">${done ? 'ПРОЙДЕНО' : `цель: волна ${c.target}`}</span></div>
+    h += `<div class="srow"><div class="head"><span class="name">${c.n}</span><span class="gold">${done ? 'ПРОЙДЕНО' : `цель: волна ${c.target}`}</span></div>
       <div class="nums">${c.d}</div>
       <div class="nums" style="color:var(--gold)">награда: +${c.reward.shards}¤¤ · +${c.reward.seals} печати${best ? ' · лучший: ' + best : ''}</div>
       <div class="acts"><button class="ibtn small ${done ? '' : 'fill'}" data-challenge="${c.id}">${done ? 'ПОВТОРИТЬ' : 'НАЧАТЬ'}</button></div></div>`;
